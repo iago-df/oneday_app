@@ -1,0 +1,47 @@
+#python cache
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+#entorno virtual
+venv/
+
+#variables del entorno
+.env
+
+#base de dstos
+db.sqlite3
+
+#django
+staticfiles/
+media/
+
+#ide
+.idea/
+
+
+
+
+
+
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Virtual env
+venv/
+.env
+
+# DB
+db.sqlite3
+
+# Django
+staticfiles/
+media/
+
+# IDE
+.idea/
