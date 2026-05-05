@@ -200,3 +200,61 @@ class ActivityTemplate(models.Model):
 
     def __str__(self):
         return self.title
+
+
+
+class Activity(models.Model):
+    ACTIVITY_TYPE_CHOICES = [
+        ('task', 'Task'),
+        ('session', 'Session'),
+        ('habit', 'Habit'),
+        ('event', 'Event'),
+        ('deep_work', 'Deep Work'),
+    ]
+    STATUS_CHOICES = [
+        ('pending', 'Pending'),
+        ('in_progress', 'In Progress'),
+        ('completed', 'Completed'),
+        ('partial', 'Partial'),
+        ('failed', 'Failed'),
+    ]
+
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='activities')
+    day_entry = models.ForeignKey(
+        DayEntry, on_delete=models.CASCADE, null=True, blank=True, related_name='activities'
+    )
+    goal = models.ForeignKey(
+        Goal, on_delete=models.SET_NULL, null=True, blank=True, related_name='activities'
+    )
+    category = models.ForeignKey(
+        Category, on_delete=models.SET_NULL, null=True, blank=True, related_name='activities'
+    )
+    template = models.ForeignKey(
+        ActivityTemplate, on_delete=models.SET_NULL, null=True, blank=True, related_name='activities'
+    )
+    title = models.CharField(max_length=255)
+    description = models.TextField(blank=True, null=True)
+    start_time = models.TimeField(null=True, blank=True)
+    end_time = models.TimeField(null=True, blank=True)
+    estimated_minutes = models.IntegerField(null=True, blank=True)
+    actual_minutes = models.IntegerField(null=True, blank=True)
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='pending')
+    activity_type = models.CharField(max_length=20, choices=ACTIVITY_TYPE_CHOICES, default='task')
+    order = models.IntegerField(default=0)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return self.title
+
+
+class DayNote(models.Model):
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='day_notes')
+    day_entry = models.ForeignKey(DayEntry, on_delete=models.CASCADE, related_name='notes')
+    text = models.TextField()
+    order = models.IntegerField(default=0)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return f'{self.user.username} — {self.day_entry.date} — note {self.order}'
