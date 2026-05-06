@@ -5,6 +5,7 @@ from django.contrib.auth.models import User
 from .models import AuthToken, UserProfile
 
 
+
 @csrf_exempt
 def register(request):
     if request.method != 'POST':
@@ -47,3 +48,36 @@ def register(request):
     }, status=201)
 
 
+@csrf_exempt
+def login(request):
+    if request.method != 'POST':
+        return JsonResponse({'error': 'Method not allowed'}, status=405)
+
+    try:
+        data = json.loads(request.body)
+    except (json.JSONDecodeError, ValueError):
+        return JsonResponse({'error': 'Invalid JSON'}, status=400)
+
+    username = data.get('username', '')
+    password = data.get('password', '')
+
+    if not username or not password:
+        return JsonResponse({'error': 'username and password are required'}, status=400)
+
+    user = authenticate(username=username, password=password)
+    if not user:
+        return JsonResponse({'error': 'Invalid credentials'}, status=401)
+
+    token = AuthToken.objects.create(user=user, key=AuthToken.generate_key())
+
+    profile = getattr(user, 'profile', None)
+
+    return JsonResponse({
+        'token': token.key,
+        'user': {
+            'id': user.id,
+            'username': user.username,
+            'email': user.email,
+            'name': profile.name if profile else user.username,
+        },
+    })
