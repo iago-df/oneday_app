@@ -24,6 +24,7 @@ class AuthMixin:
             return err
         return super().dispatch(request, *args, **kwargs)
 
+
 @method_decorator(csrf_exempt, name='dispatch')
 class RegisterView(View):
     def post(self, request):
@@ -165,3 +166,23 @@ class ProfileView(AuthMixin, View):
         profile.refresh_from_db()
         return JsonResponse(self._profile_json(profile))
 
+
+
+
+
+def _category_json(c):
+    return {
+        'id': c.id,
+        'name': c.name,
+        'icon': c.icon,
+        'color': c.color,
+        'is_active': c.is_active,
+        'created_at': c.created_at.isoformat(),
+        'updated_at': c.updated_at.isoformat(),
+    }
+
+
+class CategoriesListView(AuthMixin, View):
+    def get(self, request):
+        qs = Category.objects.filter(user=self.user).order_by('name')
+        return JsonResponse({'categories': [_category_json(c) for c in qs]})
