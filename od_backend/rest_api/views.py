@@ -206,3 +206,17 @@ class CategoriesListView(AuthMixin, View):
             is_active=data.get('is_active', True),
         )
         return JsonResponse(_category_json(category), status=201)
+
+
+class CategoriesDetailView(AuthMixin, View):
+    def _get_category(self, id):
+        try:
+            return Category.objects.get(id=id, user=self.user), None
+        except Category.DoesNotExist:
+            return None, JsonResponse({'error': 'Category not found'}, status=404)
+
+    def get(self, request, id):
+        category, err = self._get_category(id)
+        if err:
+            return err
+        return JsonResponse(_category_json(category))
