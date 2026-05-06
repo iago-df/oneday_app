@@ -3,6 +3,7 @@ import json
 from django.contrib.auth import authenticate
 from django.http import JsonResponse
 from django.utils.decorators import method_decorator
+from django.views import View
 from django.views.decorators.csrf import csrf_exempt
 from django.contrib.auth.models import User
 
@@ -117,3 +118,20 @@ class MeView(AuthMixin, View):
             'name': profile_data['name'],
             'avatar_url': profile_data['avatar_url'],
         })
+
+
+class ProfileView(AuthMixin, View):
+    def _profile_json(self, profile):
+        return {
+            'id': profile.id,
+            'username': self.user.username,
+            'email': self.user.email,
+            'name': profile.name,
+            'avatar_url': profile.avatar_url,
+            'created_at': profile.created_at.isoformat(),
+            'updated_at': profile.updated_at.isoformat(),
+        }
+
+    def get(self, request):
+        profile, _ = UserProfile.objects.get_or_create(user=self.user, defaults={'name': self.user.username})
+        return JsonResponse(self._profile_json(profile))
