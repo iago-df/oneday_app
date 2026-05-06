@@ -99,3 +99,27 @@ def auth_logout(request):
     key = auth_header[6:]
     AuthToken.objects.filter(key=key).update(is_active=False)
     return JsonResponse({'message': 'Logged out'})
+
+
+
+@csrf_exempt
+def auth_me(request):
+    user, err = get_authenticated_user(request)
+    if err:
+        return err
+    if request.method != 'GET':
+        return JsonResponse({'error': 'Method not allowed'}, status=405)
+
+    try:
+        profile = user.profile
+        profile_data = {'name': profile.name, 'avatar_url': profile.avatar_url}
+    except UserProfile.DoesNotExist:
+        profile_data = {'name': user.username, 'avatar_url': None}
+
+    return JsonResponse({
+        'id': user.id,
+        'username': user.username,
+        'email': user.email,
+        'name': profile_data['name'],
+        'avatar_url': profile_data['avatar_url'],
+    })
