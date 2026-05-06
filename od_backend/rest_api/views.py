@@ -135,3 +135,33 @@ class ProfileView(AuthMixin, View):
     def get(self, request):
         profile, _ = UserProfile.objects.get_or_create(user=self.user, defaults={'name': self.user.username})
         return JsonResponse(self._profile_json(profile))
+
+
+    def put(self, request):
+        profile, _ = UserProfile.objects.get_or_create(user=self.user, defaults={'name': self.user.username})
+
+        try:
+            data = json.loads(request.body)
+        except (json.JSONDecodeError, ValueError):
+            return JsonResponse({'error': 'Invalid JSON'}, status=400)
+
+        if 'name' in data:
+            name = data['name'].strip()
+            if not name:
+                return JsonResponse({'error': 'name cannot be empty'}, status=400)
+            profile.name = name
+
+        if 'avatar_url' in data:
+            profile.avatar_url = data['avatar_url'] or None
+
+        if 'email' in data:
+            email = data['email'].strip()
+            if email and User.objects.filter(email=email).exclude(id=self.user.id).exists():
+                return JsonResponse({'error': 'Email already in use'}, status=409)
+            self.user.email = email
+            self.user.save(update_fields=['email'])
+
+        profile.save()
+        profile.refresh_from_db()
+        return JsonResponse(self._profile_json(profile))
+
