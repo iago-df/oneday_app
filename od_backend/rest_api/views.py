@@ -183,3 +183,26 @@ class CategoriesListView(AuthMixin, View):
     def get(self, request):
         qs = Category.objects.filter(user=self.user).order_by('name')
         return JsonResponse({'categories': [_category_json(c) for c in qs]})
+
+
+    def post(self, request):
+        try:
+            data = json.loads(request.body)
+        except (json.JSONDecodeError, ValueError):
+            return JsonResponse({'error': 'Invalid JSON'}, status=400)
+
+        name = data.get('name', '').strip()
+        if not name:
+            return JsonResponse({'error': 'name is required'}, status=400)
+
+        if Category.objects.filter(user=self.user, name=name).exists():
+            return JsonResponse({'error': 'Category with this name already exists'}, status=409)
+
+        category = Category.objects.create(
+            user=self.user,
+            name=name,
+            icon=data.get('icon') or None,
+            color=data.get('color') or None,
+            is_active=data.get('is_active', True),
+        )
+        return JsonResponse(_category_json(category), status=201)
