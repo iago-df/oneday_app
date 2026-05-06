@@ -8,8 +8,7 @@ from django.views.decorators.csrf import csrf_exempt
 from django.contrib.auth.models import User
 
 from .helpers import get_authenticated_user
-from .models import AuthToken, UserProfile
-
+from .models import AuthToken, UserProfile, Category
 
 
 class AuthMixin:
@@ -23,6 +22,7 @@ class AuthMixin:
         if err:
             return err
         return super().dispatch(request, *args, **kwargs)
+
 
 @method_decorator(csrf_exempt, name='dispatch')
 class RegisterView(View):
@@ -165,3 +165,95 @@ class ProfileView(AuthMixin, View):
         profile.refresh_from_db()
         return JsonResponse(self._profile_json(profile))
 
+
+
+def _category_json(c):
+    return {
+        'id': c.id,
+        'name': c.name,
+        'icon': c.icon,
+        'color': c.color,
+        'is_active': c.is_active,
+        'created_at': c.created_at.isoformat(),
+        'updated_at': c.updated_at.isoformat(),
+    }
+
+
+class CategoriesListView(AuthMixin, View):
+    def get(self, request):
+        qs = Category.objects.filter(user=self.user).order_by('name')
+        return JsonResponse({'categories': [_category_json(c) for c in qs]})
+
+
+    def post(self, request):
+        try:
+            data = json.loads(request.body)
+        except (json.JSONDecodeError, ValueError):
+            return JsonResponse({'error': 'Invalid JSON'}, status=400)
+
+        name = data.get('name', '').strip()
+        if not name:
+            return JsonResponse({'error': 'name is required'}, status=400)
+
+        if Category.objects.filter(user=self.user, name=name).exists():
+            return JsonResponse({'error': 'Category with this name already exists'}, status=409)
+
+        category = Category.objects.create(
+            user=self.user,
+            name=name,
+            icon=data.get('icon') or None,
+            color=data.get('color') or None,
+            is_active=data.get('is_active', True),
+        )
+        return JsonResponse(_category_json(category), status=201)
+
+
+class CategoriesDetailView(AuthMixin, View):
+    def _get_category(self, id):
+        try:
+            return Category.objects.get(id=id, user=self.user), None
+        except Category.DoesNotExist:
+            return None, JsonResponse({'error': 'Category not found'}, status=404)
+
+    def get(self, request, id):
+        category, err = self._get_category(id)
+        if err:
+            return err
+        return JsonResponse(_category_json(category))
+
+
+    def put(self, request, id):
+        category, err = self._get_category(id)
+        if err:
+            return err
+
+        try:
+            data = json.loads(request.body)
+        except (json.JSONDecodeError, ValueError):
+            return JsonResponse({'error': 'Invalid JSON'}, status=400)
+
+        if 'name' in data:
+            name = data['name'].strip()
+            if not name:
+                return JsonResponse({'error': 'name cannot be empty'}, status=400)
+            if Category.objects.filter(user=self.user, name=name).exclude(id=id).exists():
+                return JsonResponse({'error': 'Category with this name already exists'}, status=409)
+            category.name = name
+
+        if 'icon' in data:
+            category.icon = data['icon'] or None
+        if 'color' in data:
+            category.color = data['color'] or None
+        if 'is_active' in data:
+            category.is_active = bool(data['is_active'])
+
+        category.save()
+        return JsonResponse(_category_json(category))
+
+
+    def delete(self, request, id):
+        category, err = self._get_category(id)
+        if err:
+            return err
+        category.delete()
+        return JsonResponse({'message': 'Category deleted'})
