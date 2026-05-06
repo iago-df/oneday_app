@@ -8,8 +8,7 @@ from django.views.decorators.csrf import csrf_exempt
 from django.contrib.auth.models import User
 
 from .helpers import get_authenticated_user
-from .models import AuthToken, UserProfile
-
+from .models import AuthToken, UserProfile, Category
 
 
 class AuthMixin:
@@ -165,8 +164,6 @@ class ProfileView(AuthMixin, View):
         profile.save()
         profile.refresh_from_db()
         return JsonResponse(self._profile_json(profile))
-
-
 
 
 
