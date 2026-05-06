@@ -220,3 +220,32 @@ class CategoriesDetailView(AuthMixin, View):
         if err:
             return err
         return JsonResponse(_category_json(category))
+
+
+    def put(self, request, id):
+        category, err = self._get_category(id)
+        if err:
+            return err
+
+        try:
+            data = json.loads(request.body)
+        except (json.JSONDecodeError, ValueError):
+            return JsonResponse({'error': 'Invalid JSON'}, status=400)
+
+        if 'name' in data:
+            name = data['name'].strip()
+            if not name:
+                return JsonResponse({'error': 'name cannot be empty'}, status=400)
+            if Category.objects.filter(user=self.user, name=name).exclude(id=id).exists():
+                return JsonResponse({'error': 'Category with this name already exists'}, status=409)
+            category.name = name
+
+        if 'icon' in data:
+            category.icon = data['icon'] or None
+        if 'color' in data:
+            category.color = data['color'] or None
+        if 'is_active' in data:
+            category.is_active = bool(data['is_active'])
+
+        category.save()
+        return JsonResponse(_category_json(category))
