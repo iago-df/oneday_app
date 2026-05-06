@@ -249,3 +249,11 @@ class CategoriesDetailView(AuthMixin, View):
 
         category.save()
         return JsonResponse(_category_json(category))
+
+
+    def delete(self, request, id):
+        category, err = self._get_category(id)
+        if err:
+            return err
+        category.delete()
+        return JsonResponse({'message': 'Category deleted'})
