@@ -4,6 +4,8 @@ from django.contrib.auth import authenticate
 from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt
 from django.contrib.auth.models import User
+
+from .helpers import get_authenticated_user
 from .models import AuthToken, UserProfile
 
 
@@ -83,3 +85,17 @@ def login(request):
             'name': profile.name if profile else user.username,
         },
     })
+
+
+@csrf_exempt
+def auth_logout(request):
+    user, err = get_authenticated_user(request)
+    if err:
+        return err
+    if request.method != 'POST':
+        return JsonResponse({'error': 'Method not allowed'}, status=405)
+
+    auth_header = request.headers.get('Authorization', '')
+    key = auth_header[6:]
+    AuthToken.objects.filter(key=key).update(is_active=False)
+    return JsonResponse({'message': 'Logged out'})
