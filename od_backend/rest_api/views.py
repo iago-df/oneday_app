@@ -257,3 +257,20 @@ class CategoriesDetailView(AuthMixin, View):
             return err
         category.delete()
         return JsonResponse({'message': 'Category deleted'})
+
+
+
+
+def _tag_json(t):
+    return {
+        'id': t.id,
+        'name': t.name,
+        'created_at': t.created_at.isoformat(),
+        'updated_at': t.updated_at.isoformat(),
+    }
+
+
+class TagsListView(AuthMixin, View):
+    def get(self, request):
+        qs = Tag.objects.filter(user=self.user).order_by('name')
+        return JsonResponse({'tags': [_tag_json(t) for t in qs]})
