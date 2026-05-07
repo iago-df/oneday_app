@@ -274,3 +274,20 @@ class TagsListView(AuthMixin, View):
     def get(self, request):
         qs = Tag.objects.filter(user=self.user).order_by('name')
         return JsonResponse({'tags': [_tag_json(t) for t in qs]})
+
+
+    def post(self, request):
+        try:
+            data = json.loads(request.body)
+        except (json.JSONDecodeError, ValueError):
+            return JsonResponse({'error': 'Invalid JSON'}, status=400)
+
+        name = data.get('name', '').strip()
+        if not name:
+            return JsonResponse({'error': 'name is required'}, status=400)
+
+        if Tag.objects.filter(user=self.user, name=name).exists():
+            return JsonResponse({'error': 'Tag with this name already exists'}, status=409)
+
+        tag = Tag.objects.create(user=self.user, name=name)
+        return JsonResponse(_tag_json(tag), status=201)
