@@ -326,3 +326,11 @@ class TagsDetailView(AuthMixin, View):
 
         tag.save()
         return JsonResponse(_tag_json(tag))
+
+
+    def delete(self, request, id):
+        tag, err = self._get_tag(id)
+        if err:
+            return err
+        tag.delete()
+        return JsonResponse({'message': 'Tag deleted'})
