@@ -8,7 +8,7 @@ from django.views.decorators.csrf import csrf_exempt
 from django.contrib.auth.models import User
 
 from .helpers import get_authenticated_user
-from .models import AuthToken, UserProfile, Category, Tag
+from .models import AuthToken, UserProfile, Category, Tag, Goal
 
 
 class AuthMixin:
@@ -334,3 +334,54 @@ class TagsDetailView(AuthMixin, View):
             return err
         tag.delete()
         return JsonResponse({'message': 'Tag deleted'})
+
+
+
+
+
+def _goal_json(goal):
+    return {
+        'id': goal.id,
+        'title': goal.title,
+        'description': goal.description,
+        'goal_type': goal.goal_type,
+        'frequency': goal.frequency,
+        'status': goal.status,
+        'progress_percent': goal.progress_percent,
+        'target_value': goal.target_value,
+        'current_value': goal.current_value,
+        'start_date': goal.start_date.isoformat() if goal.start_date else None,
+        'end_date': goal.end_date.isoformat() if goal.end_date else None,
+        'deadline': goal.deadline.isoformat() if goal.deadline else None,
+        'is_active': goal.is_active,
+        'category_id': goal.category_id,
+        'parent_goal_id': goal.parent_goal_id,
+        'tags': [{'id': t.id, 'name': t.name} for t in goal.tags.all()],
+        'created_at': goal.created_at.isoformat(),
+        'updated_at': goal.updated_at.isoformat(),
+    }
+
+
+
+class GoalsListView(AuthMixin, View):
+    def get(self, request):
+        qs = Goal.objects.filter(user=self.user).prefetch_related('tags').order_by('-created_at')
+
+        goal_type = request.GET.get('goal_type')
+        category_id = request.GET.get('category_id')
+        status = request.GET.get('status')
+        from_date = request.GET.get('from')
+        to_date = request.GET.get('to')
+
+        if goal_type:
+            qs = qs.filter(goal_type=goal_type)
+        if category_id:
+            qs = qs.filter(category_id=category_id)
+        if status:
+            qs = qs.filter(status=status)
+        if from_date:
+            qs = qs.filter(start_date__gte=from_date)
+        if to_date:
+            qs = qs.filter(deadline__lte=to_date)
+
+        return JsonResponse({'goals': [_goal_json(g) for g in qs]})
