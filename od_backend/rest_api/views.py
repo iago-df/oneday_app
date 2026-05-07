@@ -1,5 +1,5 @@
 import json
-
+import datetime as dt
 from django.contrib.auth import authenticate
 from django.http import JsonResponse
 from django.utils.decorators import method_decorator
@@ -339,6 +339,15 @@ class TagsDetailView(AuthMixin, View):
 
 
 
+def _parse_date(value, field_name):
+    if not value:
+        return None, None
+    try:
+        return dt.date.fromisoformat(value), None
+    except (TypeError, ValueError):
+        return None, JsonResponse({'error': f'{field_name} must be YYYY-MM-DD'}, status=400)
+
+
 def _goal_json(goal):
     return {
         'id': goal.id,
@@ -430,6 +439,19 @@ class GoalsListView(AuthMixin, View):
             except Goal.DoesNotExist:
                 return JsonResponse({'error': 'Parent goal not found'}, status=404)
 
+        start_date, err = _parse_date(data.get('start_date'), 'start_date')
+        if err:
+            return err
+
+        end_date, err = _parse_date(data.get('end_date'), 'end_date')
+        if err:
+            return err
+
+        deadline, err = _parse_date(data.get('deadline'), 'deadline')
+        if err:
+            return err
+
+
         tags, err = _resolve_tags(data.get('tag_ids', []), self.user)
         if err:
             return err
@@ -444,9 +466,9 @@ class GoalsListView(AuthMixin, View):
             progress_percent=progress_percent,
             target_value=data.get('target_value') or None,
             current_value=data.get('current_value') or None,
-            start_date=data.get('start_date') or None,
-            end_date=data.get('end_date') or None,
-            deadline=data.get('deadline') or None,
+            start_date=start_date,
+            end_date=end_date,
+            deadline=deadline,
             is_active=data.get('is_active', True),
             category=category,
             parent_goal=parent_goal,
