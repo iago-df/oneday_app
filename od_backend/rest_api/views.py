@@ -470,3 +470,69 @@ class GoalsDetailView(AuthMixin, View):
         if err:
             return err
         return JsonResponse(_goal_json(goal))
+
+
+    def put(self, request, id):
+        goal, err = self._get_goal(id)
+        if err:
+            return err
+
+        try:
+            data = json.loads(request.body)
+        except (json.JSONDecodeError, ValueError):
+            return JsonResponse({'error': 'Invalid JSON'}, status=400)
+
+        if 'title' in data:
+            title = data['title'].strip()
+            if not title:
+                return JsonResponse({'error': 'title cannot be empty'}, status=400)
+            goal.title = title
+
+        if 'progress_percent' in data:
+            try:
+                progress_percent = float(data['progress_percent'])
+            except (TypeError, ValueError):
+                return JsonResponse({'error': 'progress_percent must be a number'}, status=400)
+            if not (0 <= progress_percent <= 100):
+                return JsonResponse({'error': 'progress_percent must be between 0 and 100'}, status=400)
+            goal.progress_percent = progress_percent
+
+        if 'category_id' in data:
+            if data['category_id'] is None:
+                goal.category = None
+            else:
+                try:
+                    goal.category = Category.objects.get(id=data['category_id'], user=self.user)
+                except Category.DoesNotExist:
+                    return JsonResponse({'error': 'Category not found'}, status=404)
+
+        if 'parent_goal_id' in data:
+            if data['parent_goal_id'] is None:
+                goal.parent_goal = None
+            else:
+                if data['parent_goal_id'] == goal.id:
+                    return JsonResponse({'error': 'A goal cannot be its own parent'}, status=400)
+                try:
+                    goal.parent_goal = Goal.objects.get(id=data['parent_goal_id'], user=self.user)
+                except Goal.DoesNotExist:
+                    return JsonResponse({'error': 'Parent goal not found'}, status=404)
+
+        simple_fields = (
+            'description', 'goal_type', 'frequency', 'status',
+            'target_value', 'current_value', 'start_date',
+            'end_date', 'deadline', 'is_active',
+        )
+        for field in simple_fields:
+            if field in data:
+                setattr(goal, field, data[field] if data[field] != '' else None)
+
+        goal.save()
+
+        if 'tag_ids' in data:
+            tags, err = _resolve_tags(data['tag_ids'], self.user)
+            if err:
+                return err
+            goal.tags.set(tags)
+
+        goal.refresh_from_db()
+        return JsonResponse(_goal_json(goal))
