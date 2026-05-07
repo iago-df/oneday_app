@@ -8,7 +8,7 @@ from django.views.decorators.csrf import csrf_exempt
 from django.contrib.auth.models import User
 
 from .helpers import get_authenticated_user
-from .models import AuthToken, UserProfile, Category, Tag
+from .models import AuthToken, UserProfile, Category, Tag, Goal
 
 
 class AuthMixin:
@@ -334,3 +334,213 @@ class TagsDetailView(AuthMixin, View):
             return err
         tag.delete()
         return JsonResponse({'message': 'Tag deleted'})
+
+
+
+
+
+def _goal_json(goal):
+    return {
+        'id': goal.id,
+        'title': goal.title,
+        'description': goal.description,
+        'goal_type': goal.goal_type,
+        'frequency': goal.frequency,
+        'status': goal.status,
+        'progress_percent': goal.progress_percent,
+        'target_value': goal.target_value,
+        'current_value': goal.current_value,
+        'start_date': goal.start_date.isoformat() if goal.start_date else None,
+        'end_date': goal.end_date.isoformat() if goal.end_date else None,
+        'deadline': goal.deadline.isoformat() if goal.deadline else None,
+        'is_active': goal.is_active,
+        'category_id': goal.category_id,
+        'parent_goal_id': goal.parent_goal_id,
+        'tags': [{'id': t.id, 'name': t.name} for t in goal.tags.all()],
+        'created_at': goal.created_at.isoformat(),
+        'updated_at': goal.updated_at.isoformat(),
+    }
+
+
+def _resolve_tags(tag_ids, user):
+    if not isinstance(tag_ids, list):
+        return None, JsonResponse({'error': 'tag_ids must be a list'}, status=400)
+    if not tag_ids:
+        return [], None
+    tags = list(Tag.objects.filter(id__in=tag_ids, user=user))
+    if len(tags) != len(set(tag_ids)):
+        return None, JsonResponse({'error': 'One or more tag IDs not found'}, status=404)
+    return tags, None
+
+
+
+class GoalsListView(AuthMixin, View):
+    def get(self, request):
+        qs = Goal.objects.filter(user=self.user).prefetch_related('tags').order_by('-created_at')
+
+        goal_type = request.GET.get('goal_type')
+        category_id = request.GET.get('category_id')
+        status = request.GET.get('status')
+        from_date = request.GET.get('from')
+        to_date = request.GET.get('to')
+
+        if goal_type:
+            qs = qs.filter(goal_type=goal_type)
+        if category_id:
+            qs = qs.filter(category_id=category_id)
+        if status:
+            qs = qs.filter(status=status)
+        if from_date:
+            qs = qs.filter(start_date__gte=from_date)
+        if to_date:
+            qs = qs.filter(deadline__lte=to_date)
+
+        return JsonResponse({'goals': [_goal_json(g) for g in qs]})
+
+
+    def post(self, request):
+        try:
+            data = json.loads(request.body)
+        except (json.JSONDecodeError, ValueError):
+            return JsonResponse({'error': 'Invalid JSON'}, status=400)
+
+        title = data.get('title', '').strip()
+        if not title:
+            return JsonResponse({'error': 'title is required'}, status=400)
+
+        progress_percent = data.get('progress_percent', 0)
+        try:
+            progress_percent = float(progress_percent)
+        except (TypeError, ValueError):
+            return JsonResponse({'error': 'progress_percent must be a number'}, status=400)
+        if not (0 <= progress_percent <= 100):
+            return JsonResponse({'error': 'progress_percent must be between 0 and 100'}, status=400)
+
+        category = None
+        if data.get('category_id'):
+            try:
+                category = Category.objects.get(id=data['category_id'], user=self.user)
+            except Category.DoesNotExist:
+                return JsonResponse({'error': 'Category not found'}, status=404)
+
+        parent_goal = None
+        if data.get('parent_goal_id'):
+            try:
+                parent_goal = Goal.objects.get(id=data['parent_goal_id'], user=self.user)
+            except Goal.DoesNotExist:
+                return JsonResponse({'error': 'Parent goal not found'}, status=404)
+
+        tags, err = _resolve_tags(data.get('tag_ids', []), self.user)
+        if err:
+            return err
+
+        goal = Goal.objects.create(
+            user=self.user,
+            title=title,
+            description=data.get('description') or None,
+            goal_type=data.get('goal_type', 'daily'),
+            frequency=data.get('frequency', 'once'),
+            status=data.get('status', 'planned'),
+            progress_percent=progress_percent,
+            target_value=data.get('target_value') or None,
+            current_value=data.get('current_value') or None,
+            start_date=data.get('start_date') or None,
+            end_date=data.get('end_date') or None,
+            deadline=data.get('deadline') or None,
+            is_active=data.get('is_active', True),
+            category=category,
+            parent_goal=parent_goal,
+        )
+        if tags:
+            goal.tags.set(tags)
+
+        return JsonResponse(_goal_json(goal), status=201)
+
+
+
+class GoalsDetailView(AuthMixin, View):
+    def _get_goal(self, id):
+        try:
+            return Goal.objects.prefetch_related('tags').get(id=id, user=self.user), None
+        except Goal.DoesNotExist:
+            return None, JsonResponse({'error': 'Goal not found'}, status=404)
+
+    def get(self, request, id):
+        goal, err = self._get_goal(id)
+        if err:
+            return err
+        return JsonResponse(_goal_json(goal))
+
+
+    def put(self, request, id):
+        goal, err = self._get_goal(id)
+        if err:
+            return err
+
+        try:
+            data = json.loads(request.body)
+        except (json.JSONDecodeError, ValueError):
+            return JsonResponse({'error': 'Invalid JSON'}, status=400)
+
+        if 'title' in data:
+            title = data['title'].strip()
+            if not title:
+                return JsonResponse({'error': 'title cannot be empty'}, status=400)
+            goal.title = title
+
+        if 'progress_percent' in data:
+            try:
+                progress_percent = float(data['progress_percent'])
+            except (TypeError, ValueError):
+                return JsonResponse({'error': 'progress_percent must be a number'}, status=400)
+            if not (0 <= progress_percent <= 100):
+                return JsonResponse({'error': 'progress_percent must be between 0 and 100'}, status=400)
+            goal.progress_percent = progress_percent
+
+        if 'category_id' in data:
+            if data['category_id'] is None:
+                goal.category = None
+            else:
+                try:
+                    goal.category = Category.objects.get(id=data['category_id'], user=self.user)
+                except Category.DoesNotExist:
+                    return JsonResponse({'error': 'Category not found'}, status=404)
+
+        if 'parent_goal_id' in data:
+            if data['parent_goal_id'] is None:
+                goal.parent_goal = None
+            else:
+                if data['parent_goal_id'] == goal.id:
+                    return JsonResponse({'error': 'A goal cannot be its own parent'}, status=400)
+                try:
+                    goal.parent_goal = Goal.objects.get(id=data['parent_goal_id'], user=self.user)
+                except Goal.DoesNotExist:
+                    return JsonResponse({'error': 'Parent goal not found'}, status=404)
+
+        simple_fields = (
+            'description', 'goal_type', 'frequency', 'status',
+            'target_value', 'current_value', 'start_date',
+            'end_date', 'deadline', 'is_active',
+        )
+        for field in simple_fields:
+            if field in data:
+                setattr(goal, field, data[field] if data[field] != '' else None)
+
+        goal.save()
+
+        if 'tag_ids' in data:
+            tags, err = _resolve_tags(data['tag_ids'], self.user)
+            if err:
+                return err
+            goal.tags.set(tags)
+
+        goal.refresh_from_db()
+        return JsonResponse(_goal_json(goal))
+
+
+    def delete(self, request, id):
+        goal, err = self._get_goal(id)
+        if err:
+            return err
+        goal.delete()
+        return JsonResponse({'message': 'Goal deleted'})
