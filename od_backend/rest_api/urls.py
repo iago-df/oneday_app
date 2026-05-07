@@ -9,4 +9,6 @@ urlpatterns = [
     path('profile/', views.ProfileView.as_view(), name='profile_view'),
     path('categories/', views.CategoriesListView.as_view(), name='categories_list'),
     path('categories/<int:id>/', views.CategoriesDetailView.as_view(), name='categories_detail'),
+    path('tags/', views.TagsListView.as_view(), name='tags_list'),
+    path('tags/<int:id>/', views.TagsDetailView.as_view(), name='tags_detail'),
 ]

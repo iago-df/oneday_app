@@ -8,7 +8,7 @@ from django.views.decorators.csrf import csrf_exempt
 from django.contrib.auth.models import User
 
 from .helpers import get_authenticated_user
-from .models import AuthToken, UserProfile, Category
+from .models import AuthToken, UserProfile, Category, Tag
 
 
 class AuthMixin:
@@ -257,3 +257,80 @@ class CategoriesDetailView(AuthMixin, View):
             return err
         category.delete()
         return JsonResponse({'message': 'Category deleted'})
+
+
+
+
+def _tag_json(t):
+    return {
+        'id': t.id,
+        'name': t.name,
+        'created_at': t.created_at.isoformat(),
+        'updated_at': t.updated_at.isoformat(),
+    }
+
+
+class TagsListView(AuthMixin, View):
+    def get(self, request):
+        qs = Tag.objects.filter(user=self.user).order_by('name')
+        return JsonResponse({'tags': [_tag_json(t) for t in qs]})
+
+
+    def post(self, request):
+        try:
+            data = json.loads(request.body)
+        except (json.JSONDecodeError, ValueError):
+            return JsonResponse({'error': 'Invalid JSON'}, status=400)
+
+        name = data.get('name', '').strip()
+        if not name:
+            return JsonResponse({'error': 'name is required'}, status=400)
+
+        if Tag.objects.filter(user=self.user, name=name).exists():
+            return JsonResponse({'error': 'Tag with this name already exists'}, status=409)
+
+        tag = Tag.objects.create(user=self.user, name=name)
+        return JsonResponse(_tag_json(tag), status=201)
+
+
+class TagsDetailView(AuthMixin, View):
+    def _get_tag(self, id):
+        try:
+            return Tag.objects.get(id=id, user=self.user), None
+        except Tag.DoesNotExist:
+            return None, JsonResponse({'error': 'Tag not found'}, status=404)
+
+    def get(self, request, id):
+        tag, err = self._get_tag(id)
+        if err:
+            return err
+        return JsonResponse(_tag_json(tag))
+
+    def put(self, request, id):
+        tag, err = self._get_tag(id)
+        if err:
+            return err
+
+        try:
+            data = json.loads(request.body)
+        except (json.JSONDecodeError, ValueError):
+            return JsonResponse({'error': 'Invalid JSON'}, status=400)
+
+        if 'name' in data:
+            name = data['name'].strip()
+            if not name:
+                return JsonResponse({'error': 'name cannot be empty'}, status=400)
+            if Tag.objects.filter(user=self.user, name=name).exclude(id=id).exists():
+                return JsonResponse({'error': 'Tag with this name already exists'}, status=409)
+            tag.name = name
+
+        tag.save()
+        return JsonResponse(_tag_json(tag))
+
+
+    def delete(self, request, id):
+        tag, err = self._get_tag(id)
+        if err:
+            return err
+        tag.delete()
+        return JsonResponse({'message': 'Tag deleted'})
