@@ -305,3 +305,24 @@ class TagsDetailView(AuthMixin, View):
         if err:
             return err
         return JsonResponse(_tag_json(tag))
+
+    def put(self, request, id):
+        tag, err = self._get_tag(id)
+        if err:
+            return err
+
+        try:
+            data = json.loads(request.body)
+        except (json.JSONDecodeError, ValueError):
+            return JsonResponse({'error': 'Invalid JSON'}, status=400)
+
+        if 'name' in data:
+            name = data['name'].strip()
+            if not name:
+                return JsonResponse({'error': 'name cannot be empty'}, status=400)
+            if Tag.objects.filter(user=self.user, name=name).exclude(id=id).exists():
+                return JsonResponse({'error': 'Tag with this name already exists'}, status=409)
+            tag.name = name
+
+        tag.save()
+        return JsonResponse(_tag_json(tag))
