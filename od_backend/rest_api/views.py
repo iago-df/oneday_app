@@ -536,3 +536,11 @@ class GoalsDetailView(AuthMixin, View):
 
         goal.refresh_from_db()
         return JsonResponse(_goal_json(goal))
+
+
+    def delete(self, request, id):
+        goal, err = self._get_goal(id)
+        if err:
+            return err
+        goal.delete()
+        return JsonResponse({'message': 'Goal deleted'})
