@@ -291,3 +291,17 @@ class TagsListView(AuthMixin, View):
 
         tag = Tag.objects.create(user=self.user, name=name)
         return JsonResponse(_tag_json(tag), status=201)
+
+
+class TagsDetailView(AuthMixin, View):
+    def _get_tag(self, id):
+        try:
+            return Tag.objects.get(id=id, user=self.user), None
+        except Tag.DoesNotExist:
+            return None, JsonResponse({'error': 'Tag not found'}, status=404)
+
+    def get(self, request, id):
+        tag, err = self._get_tag(id)
+        if err:
+            return err
+        return JsonResponse(_tag_json(tag))
