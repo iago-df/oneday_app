@@ -362,6 +362,17 @@ def _goal_json(goal):
     }
 
 
+def _resolve_tags(tag_ids, user):
+    if not isinstance(tag_ids, list):
+        return None, JsonResponse({'error': 'tag_ids must be a list'}, status=400)
+    if not tag_ids:
+        return [], None
+    tags = list(Tag.objects.filter(id__in=tag_ids, user=user))
+    if len(tags) != len(set(tag_ids)):
+        return None, JsonResponse({'error': 'One or more tag IDs not found'}, status=404)
+    return tags, None
+
+
 
 class GoalsListView(AuthMixin, View):
     def get(self, request):
@@ -385,3 +396,62 @@ class GoalsListView(AuthMixin, View):
             qs = qs.filter(deadline__lte=to_date)
 
         return JsonResponse({'goals': [_goal_json(g) for g in qs]})
+
+
+    def post(self, request):
+        try:
+            data = json.loads(request.body)
+        except (json.JSONDecodeError, ValueError):
+            return JsonResponse({'error': 'Invalid JSON'}, status=400)
+
+        title = data.get('title', '').strip()
+        if not title:
+            return JsonResponse({'error': 'title is required'}, status=400)
+
+        progress_percent = data.get('progress_percent', 0)
+        try:
+            progress_percent = float(progress_percent)
+        except (TypeError, ValueError):
+            return JsonResponse({'error': 'progress_percent must be a number'}, status=400)
+        if not (0 <= progress_percent <= 100):
+            return JsonResponse({'error': 'progress_percent must be between 0 and 100'}, status=400)
+
+        category = None
+        if data.get('category_id'):
+            try:
+                category = Category.objects.get(id=data['category_id'], user=self.user)
+            except Category.DoesNotExist:
+                return JsonResponse({'error': 'Category not found'}, status=404)
+
+        parent_goal = None
+        if data.get('parent_goal_id'):
+            try:
+                parent_goal = Goal.objects.get(id=data['parent_goal_id'], user=self.user)
+            except Goal.DoesNotExist:
+                return JsonResponse({'error': 'Parent goal not found'}, status=404)
+
+        tags, err = _resolve_tags(data.get('tag_ids', []), self.user)
+        if err:
+            return err
+
+        goal = Goal.objects.create(
+            user=self.user,
+            title=title,
+            description=data.get('description') or None,
+            goal_type=data.get('goal_type', 'daily'),
+            frequency=data.get('frequency', 'once'),
+            status=data.get('status', 'planned'),
+            progress_percent=progress_percent,
+            target_value=data.get('target_value') or None,
+            current_value=data.get('current_value') or None,
+            start_date=data.get('start_date') or None,
+            end_date=data.get('end_date') or None,
+            deadline=data.get('deadline') or None,
+            is_active=data.get('is_active', True),
+            category=category,
+            parent_goal=parent_goal,
+        )
+        if tags:
+            goal.tags.set(tags)
+
+        return JsonResponse(_goal_json(goal), status=201)
