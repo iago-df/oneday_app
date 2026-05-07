@@ -12,4 +12,5 @@ urlpatterns = [
     path('tags/', views.TagsListView.as_view(), name='tags_list'),
     path('tags/<int:id>/', views.TagsDetailView.as_view(), name='tags_detail'),
     path('goals/', views.GoalsListView.as_view(), name='goals_list'),
+    path('goals/<int:id>/', views.GoalsDetailView.as_view(), name='goals_detail'),
 ]

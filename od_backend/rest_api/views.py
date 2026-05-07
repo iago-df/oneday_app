@@ -455,3 +455,18 @@ class GoalsListView(AuthMixin, View):
             goal.tags.set(tags)
 
         return JsonResponse(_goal_json(goal), status=201)
+
+
+
+class GoalsDetailView(AuthMixin, View):
+    def _get_goal(self, id):
+        try:
+            return Goal.objects.prefetch_related('tags').get(id=id, user=self.user), None
+        except Goal.DoesNotExist:
+            return None, JsonResponse({'error': 'Goal not found'}, status=404)
+
+    def get(self, request, id):
+        goal, err = self._get_goal(id)
+        if err:
+            return err
+        return JsonResponse(_goal_json(goal))
