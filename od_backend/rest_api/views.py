@@ -645,3 +645,19 @@ class RecurrenceRulesListView(AuthMixin, View):
             is_active=data.get('is_active', True),
         )
         return JsonResponse(_recurrence_rule_json(rule), status=201)
+
+
+
+
+class RecurrenceRulesDetailView(AuthMixin, View):
+    def _get_rule(self, id):
+        try:
+            return RecurrenceRule.objects.get(id=id, user=self.user), None
+        except RecurrenceRule.DoesNotExist:
+            return None, JsonResponse({'error': 'RecurrenceRule not found'}, status=404)
+
+    def get(self, request, id):
+        rule, err = self._get_rule(id)
+        if err:
+            return err
+        return JsonResponse(_recurrence_rule_json(rule))

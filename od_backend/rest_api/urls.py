@@ -14,4 +14,5 @@ urlpatterns = [
     path('goals/', views.GoalsListView.as_view(), name='goals_list'),
     path('goals/<int:id>/', views.GoalsDetailView.as_view(), name='goals_detail'),
     path('recurrence-rules/', views.RecurrenceRulesListView.as_view(), name='recurrence_rules_list'),
+    path('recurrence-rules/<int:id>/', views.RecurrenceRulesDetailView.as_view(), name='recurrence_rules_detail'),
 ]
