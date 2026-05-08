@@ -824,3 +824,13 @@ class ActivityTemplatesDetailView(AuthMixin, View):
         if err:
             return err
         return JsonResponse(_activity_template_json(template))
+
+
+
+
+    def delete(self, request, id):
+        template, err = self._get_template(id)
+        if err:
+            return err
+        template.delete()
+        return JsonResponse({'message': 'ActivityTemplate deleted'})
