@@ -766,3 +766,44 @@ class ActivityTemplatesListView(AuthMixin, View):
               .select_related('recurrence_rule')
               .order_by('-created_at'))
         return JsonResponse({'activity_templates': [_activity_template_json(t) for t in qs]})
+
+
+    def post(self, request):
+        try:
+            data = json.loads(request.body)
+        except (json.JSONDecodeError, ValueError):
+            return JsonResponse({'error': 'Invalid JSON'}, status=400)
+
+        title = data.get('title', '').strip()
+        if not title:
+            return JsonResponse({'error': 'title is required'}, status=400)
+
+        activity_type = data.get('activity_type', 'task')
+        if activity_type not in _VALID_ACTIVITY_TYPES:
+            return JsonResponse({'error': f'Invalid activity_type. Allowed: {sorted(_VALID_ACTIVITY_TYPES)}'}, status=400)
+
+        estimated_minutes = data.get('estimated_minutes')
+        if estimated_minutes is not None:
+            try:
+                estimated_minutes = int(estimated_minutes)
+                if estimated_minutes < 1:
+                    raise ValueError
+            except (TypeError, ValueError):
+                return JsonResponse({'error': 'estimated_minutes must be a positive integer'}, status=400)
+
+        category, rule, err = _resolve_template_fks(data, self.user)
+        if err:
+            return err
+
+        template = ActivityTemplate.objects.create(
+            user=self.user,
+            title=title,
+            description=data.get('description') or None,
+            activity_type=activity_type,
+            estimated_minutes=estimated_minutes,
+            is_active=data.get('is_active', True),
+            category=category,
+            recurrence_rule=rule,
+        )
+        template = ActivityTemplate.objects.select_related('recurrence_rule').get(id=template.id)
+        return JsonResponse(_activity_template_json(template), status=201)
