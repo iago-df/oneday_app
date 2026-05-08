@@ -826,6 +826,57 @@ class ActivityTemplatesDetailView(AuthMixin, View):
         return JsonResponse(_activity_template_json(template))
 
 
+    def put(self, request, id):
+        template, err = self._get_template(id)
+        if err:
+            return err
+
+        try:
+            data = json.loads(request.body)
+        except (json.JSONDecodeError, ValueError):
+            return JsonResponse({'error': 'Invalid JSON'}, status=400)
+
+        if 'title' in data:
+            title = data['title'].strip()
+            if not title:
+                return JsonResponse({'error': 'title cannot be empty'}, status=400)
+            template.title = title
+
+        if 'activity_type' in data:
+            if data['activity_type'] not in _VALID_ACTIVITY_TYPES:
+                return JsonResponse({'error': f'Invalid activity_type. Allowed: {sorted(_VALID_ACTIVITY_TYPES)}'}, status=400)
+            template.activity_type = data['activity_type']
+
+        if 'estimated_minutes' in data:
+            if data['estimated_minutes'] is None:
+                template.estimated_minutes = None
+            else:
+                try:
+                    em = int(data['estimated_minutes'])
+                    if em < 1:
+                        raise ValueError
+                except (TypeError, ValueError):
+                    return JsonResponse({'error': 'estimated_minutes must be a positive integer'}, status=400)
+                template.estimated_minutes = em
+
+        category, rule, err = _resolve_template_fks(
+            data, self.user,
+            current_category=template.category,
+            current_rule=template.recurrence_rule,
+        )
+        if err:
+            return err
+        template.category = category
+        template.recurrence_rule = rule
+
+        if 'description' in data:
+            template.description = data['description'] or None
+        if 'is_active' in data:
+            template.is_active = bool(data['is_active'])
+
+        template.save()
+        template.refresh_from_db()
+        return JsonResponse(_activity_template_json(template))
 
 
     def delete(self, request, id):
