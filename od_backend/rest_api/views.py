@@ -702,3 +702,11 @@ class RecurrenceRulesDetailView(AuthMixin, View):
 
         rule.save()
         return JsonResponse(_recurrence_rule_json(rule))
+
+
+    def delete(self, request, id):
+        rule, err = self._get_rule(id)
+        if err:
+            return err
+        rule.delete()
+        return JsonResponse({'message': 'RecurrenceRule deleted'})
