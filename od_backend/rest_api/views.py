@@ -807,3 +807,20 @@ class ActivityTemplatesListView(AuthMixin, View):
         )
         template = ActivityTemplate.objects.select_related('recurrence_rule').get(id=template.id)
         return JsonResponse(_activity_template_json(template), status=201)
+
+
+
+class ActivityTemplatesDetailView(AuthMixin, View):
+    def _get_template(self, id):
+        try:
+            return (ActivityTemplate.objects
+                    .select_related('recurrence_rule')
+                    .get(id=id, user=self.user)), None
+        except ActivityTemplate.DoesNotExist:
+            return None, JsonResponse({'error': 'ActivityTemplate not found'}, status=404)
+
+    def get(self, request, id):
+        template, err = self._get_template(id)
+        if err:
+            return err
+        return JsonResponse(_activity_template_json(template))
