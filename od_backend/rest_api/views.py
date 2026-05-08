@@ -609,3 +609,39 @@ class RecurrenceRulesListView(AuthMixin, View):
     def get(self, request):
         qs = RecurrenceRule.objects.filter(user=self.user).order_by('-created_at')
         return JsonResponse({'recurrence_rules': [_recurrence_rule_json(r) for r in qs]})
+
+    def post(self, request):
+        try:
+            data = json.loads(request.body)
+        except (json.JSONDecodeError, ValueError):
+            return JsonResponse({'error': 'Invalid JSON'}, status=400)
+
+        frequency = data.get('frequency', 'none')
+        if frequency not in _VALID_FREQUENCIES:
+            return JsonResponse({'error': f'Invalid frequency. Allowed: {sorted(_VALID_FREQUENCIES)}'}, status=400)
+
+        interval = data.get('interval', 1)
+        try:
+            interval = int(interval)
+            if interval < 1:
+                raise ValueError
+        except (TypeError, ValueError):
+            return JsonResponse({'error': 'interval must be a positive integer'}, status=400)
+
+        days_of_week = data.get('days_of_week')
+        if days_of_week is not None:
+            err_msg = _validate_days_of_week(days_of_week)
+            if err_msg:
+                return JsonResponse({'error': err_msg}, status=400)
+
+        rule = RecurrenceRule.objects.create(
+            user=self.user,
+            frequency=frequency,
+            interval=interval,
+            days_of_week=days_of_week,
+            day_of_month=data.get('day_of_month') or None,
+            start_date=data.get('start_date') or None,
+            end_date=data.get('end_date') or None,
+            is_active=data.get('is_active', True),
+        )
+        return JsonResponse(_recurrence_rule_json(rule), status=201)
