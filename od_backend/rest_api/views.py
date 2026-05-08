@@ -710,3 +710,50 @@ class RecurrenceRulesDetailView(AuthMixin, View):
             return err
         rule.delete()
         return JsonResponse({'message': 'RecurrenceRule deleted'})
+
+
+
+
+
+_VALID_ACTIVITY_TYPES = {'task', 'session', 'habit', 'event', 'deep_work'}
+
+
+def _activity_template_json(template):
+    return {
+        'id': template.id,
+        'title': template.title,
+        'description': template.description,
+        'activity_type': template.activity_type,
+        'estimated_minutes': template.estimated_minutes,
+        'is_active': template.is_active,
+        'category_id': template.category_id,
+        'recurrence_rule_id': template.recurrence_rule_id,
+        'recurrence_rule': _recurrence_rule_json(template.recurrence_rule) if template.recurrence_rule else None,
+        'created_at': template.created_at.isoformat(),
+        'updated_at': template.updated_at.isoformat(),
+    }
+
+
+def _resolve_template_fks(data, user, current_category=None, current_rule=None):
+    category = current_category
+    rule = current_rule
+
+    if 'category_id' in data:
+        if data['category_id'] is None:
+            category = None
+        else:
+            try:
+                category = Category.objects.get(id=data['category_id'], user=user)
+            except Category.DoesNotExist:
+                return None, None, JsonResponse({'error': 'Category not found'}, status=404)
+
+    if 'recurrence_rule_id' in data:
+        if data['recurrence_rule_id'] is None:
+            rule = None
+        else:
+            try:
+                rule = RecurrenceRule.objects.get(id=data['recurrence_rule_id'], user=user)
+            except RecurrenceRule.DoesNotExist:
+                return None, None, JsonResponse({'error': 'RecurrenceRule not found'}, status=404)
+
+    return category, rule, None
