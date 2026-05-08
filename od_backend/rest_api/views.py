@@ -661,3 +661,44 @@ class RecurrenceRulesDetailView(AuthMixin, View):
         if err:
             return err
         return JsonResponse(_recurrence_rule_json(rule))
+
+
+    def put(self, request, id):
+        rule, err = self._get_rule(id)
+        if err:
+            return err
+
+        try:
+            data = json.loads(request.body)
+        except (json.JSONDecodeError, ValueError):
+            return JsonResponse({'error': 'Invalid JSON'}, status=400)
+
+        if 'frequency' in data:
+            if data['frequency'] not in _VALID_FREQUENCIES:
+                return JsonResponse({'error': f'Invalid frequency. Allowed: {sorted(_VALID_FREQUENCIES)}'}, status=400)
+            rule.frequency = data['frequency']
+
+        if 'interval' in data:
+            try:
+                interval = int(data['interval'])
+                if interval < 1:
+                    raise ValueError
+            except (TypeError, ValueError):
+                return JsonResponse({'error': 'interval must be a positive integer'}, status=400)
+            rule.interval = interval
+
+        if 'days_of_week' in data:
+            if data['days_of_week'] is None:
+                rule.days_of_week = None
+            else:
+                err_msg = _validate_days_of_week(data['days_of_week'])
+                if err_msg:
+                    return JsonResponse({'error': err_msg}, status=400)
+                rule.days_of_week = data['days_of_week']
+
+        for field in ('day_of_month', 'start_date', 'end_date', 'is_active'):
+            if field in data:
+                setattr(rule, field, data[field] if data[field] != '' else None)
+
+        rule.save()
+        return JsonResponse(_recurrence_rule_json(rule))
