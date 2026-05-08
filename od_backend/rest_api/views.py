@@ -757,3 +757,12 @@ def _resolve_template_fks(data, user, current_category=None, current_rule=None):
                 return None, None, JsonResponse({'error': 'RecurrenceRule not found'}, status=404)
 
     return category, rule, None
+
+
+class ActivityTemplatesListView(AuthMixin, View):
+    def get(self, request):
+        qs = (ActivityTemplate.objects
+              .filter(user=self.user)
+              .select_related('recurrence_rule')
+              .order_by('-created_at'))
+        return JsonResponse({'activity_templates': [_activity_template_json(t) for t in qs]})
