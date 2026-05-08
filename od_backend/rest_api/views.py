@@ -8,7 +8,7 @@ from django.views.decorators.csrf import csrf_exempt
 from django.contrib.auth.models import User
 
 from .helpers import get_authenticated_user
-from .models import AuthToken, UserProfile, Category, Tag, Goal
+from .models import AuthToken, UserProfile, Category, Tag, Goal, RecurrenceRule
 
 
 class AuthMixin:
