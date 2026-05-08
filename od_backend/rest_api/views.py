@@ -566,3 +566,11 @@ class GoalsDetailView(AuthMixin, View):
             return err
         goal.delete()
         return JsonResponse({'message': 'Goal deleted'})
+
+
+
+
+
+_VALID_FREQUENCIES = {'none', 'daily', 'weekdays', 'weekly', 'monthly', 'custom'}
+_VALID_DAYS = {'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT', 'SUN'}
+
