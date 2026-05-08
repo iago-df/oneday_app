@@ -574,6 +574,7 @@ class GoalsDetailView(AuthMixin, View):
 _VALID_FREQUENCIES = {'none', 'daily', 'weekdays', 'weekly', 'monthly', 'custom'}
 _VALID_DAYS = {'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT', 'SUN'}
 
+
 def _validate_days_of_week(days):
     if not isinstance(days, list):
         return 'days_of_week must be a list'
@@ -581,3 +582,24 @@ def _validate_days_of_week(days):
     if invalid:
         return f'Invalid days_of_week values: {invalid}. Allowed: {sorted(_VALID_DAYS)}'
     return None
+
+
+def _safe_date(val):
+    if val is None:
+        return None
+    return val if isinstance(val, str) else val.isoformat()
+
+
+def _recurrence_rule_json(rule):
+    return {
+        'id': rule.id,
+        'frequency': rule.frequency,
+        'interval': rule.interval,
+        'days_of_week': rule.days_of_week,
+        'day_of_month': rule.day_of_month,
+        'start_date': _safe_date(rule.start_date),
+        'end_date': _safe_date(rule.end_date),
+        'is_active': rule.is_active,
+        'created_at': rule.created_at.isoformat(),
+        'updated_at': rule.updated_at.isoformat(),
+    }
