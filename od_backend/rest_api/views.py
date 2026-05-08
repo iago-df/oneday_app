@@ -574,3 +574,10 @@ class GoalsDetailView(AuthMixin, View):
 _VALID_FREQUENCIES = {'none', 'daily', 'weekdays', 'weekly', 'monthly', 'custom'}
 _VALID_DAYS = {'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT', 'SUN'}
 
+def _validate_days_of_week(days):
+    if not isinstance(days, list):
+        return 'days_of_week must be a list'
+    invalid = [d for d in days if not isinstance(d, str) or d not in _VALID_DAYS]
+    if invalid:
+        return f'Invalid days_of_week values: {invalid}. Allowed: {sorted(_VALID_DAYS)}'
+    return None
