@@ -9,7 +9,7 @@ from django.contrib.auth.models import User
 from django.utils import timezone
 
 from .helpers import get_authenticated_user
-from .models import AuthToken, UserProfile, Category, Tag, Goal, RecurrenceRule, ActivityTemplate, DayEntry
+from .models import AuthToken, UserProfile, Category, Tag, Goal, RecurrenceRule, ActivityTemplate, DayEntry, Activity
 
 
 class AuthMixin:
@@ -1147,3 +1147,423 @@ class DayEntriesDraftCloseView(AuthMixin, View):
 
         entry.save()
         return JsonResponse(_day_entry_json(entry))
+
+
+
+
+
+
+_VALID_STATUSES = {'pending', 'in_progress', 'completed', 'partial', 'failed'}
+_DAY_ABBR = ['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT', 'SUN']
+
+
+def _safe_time(val):
+    if val is None:
+        return None
+    return val if isinstance(val, str) else val.isoformat()
+
+
+def _activity_json(activity):
+    return {
+        'id': activity.id,
+        'title': activity.title,
+        'description': activity.description,
+        'activity_type': activity.activity_type,
+        'status': activity.status,
+        'estimated_minutes': activity.estimated_minutes,
+        'actual_minutes': activity.actual_minutes,
+        'start_time': _safe_time(activity.start_time),
+        'end_time': _safe_time(activity.end_time),
+        'order': activity.order,
+        'day_entry_id': activity.day_entry_id,
+        'goal_id': activity.goal_id,
+        'category_id': activity.category_id,
+        'template_id': activity.template_id,
+        'created_at': activity.created_at.isoformat(),
+        'updated_at': activity.updated_at.isoformat(),
+    }
+
+
+def _rule_matches_date(rule, date):
+    freq = rule.frequency
+    if freq == 'none':
+        return False
+    if freq == 'daily':
+        return True
+    if freq == 'weekdays':
+        return date.weekday() < 5
+
+    day_abbr = _DAY_ABBR[date.weekday()]
+
+    if freq == 'weekly':
+        return day_abbr in rule.days_of_week if rule.days_of_week else True
+    if freq == 'monthly':
+        return date.day == rule.day_of_month if rule.day_of_month else True
+    if freq == 'custom':
+        return bool(rule.days_of_week) and day_abbr in rule.days_of_week
+    return False
+
+
+def _generate_recurring_for_day(entry):
+    user = entry.user
+    date = entry.date
+    if isinstance(date, str):
+        date = dt.date.fromisoformat(date)
+
+    templates = (ActivityTemplate.objects
+                 .filter(user=user, is_active=True, recurrence_rule__isnull=False)
+                 .select_related('recurrence_rule', 'category'))
+
+    existing_template_ids = set(
+        Activity.objects.filter(user=user, day_entry=entry, template__isnull=False)
+        .values_list('template_id', flat=True)
+    )
+
+    created_ids = []
+    for template in templates:
+        rule = template.recurrence_rule
+        if not rule.is_active:
+            continue
+        if template.id in existing_template_ids:
+            continue
+
+        if rule.start_date:
+            start = rule.start_date if isinstance(rule.start_date, dt.date) else dt.date.fromisoformat(rule.start_date)
+            if date < start:
+                continue
+        if rule.end_date:
+            end = rule.end_date if isinstance(rule.end_date, dt.date) else dt.date.fromisoformat(rule.end_date)
+            if date > end:
+                continue
+
+        if not _rule_matches_date(rule, date):
+            continue
+
+        activity = Activity.objects.create(
+            user=user,
+            day_entry=entry,
+            template=template,
+            title=template.title,
+            description=template.description,
+            activity_type=template.activity_type,
+            estimated_minutes=template.estimated_minutes,
+            category=template.category,
+            status='pending',
+        )
+        created_ids.append(activity.id)
+
+    return created_ids
+
+
+def _validate_positive_int(value, field_name):
+    try:
+        v = int(value)
+        if v < 1:
+            raise ValueError
+        return v, None
+    except (TypeError, ValueError):
+        return None, JsonResponse({'error': f'{field_name} must be a positive integer'}, status=400)
+
+
+def _resolve_activity_fks(data, user):
+    fks = {}
+
+    if 'day_entry_id' in data:
+        if data['day_entry_id'] is None:
+            fks['day_entry'] = None
+        else:
+            try:
+                fks['day_entry'] = DayEntry.objects.get(id=data['day_entry_id'], user=user)
+            except DayEntry.DoesNotExist:
+                return None, JsonResponse({'error': 'DayEntry not found'}, status=404)
+
+    if 'goal_id' in data:
+        if data['goal_id'] is None:
+            fks['goal'] = None
+        else:
+            try:
+                fks['goal'] = Goal.objects.get(id=data['goal_id'], user=user)
+            except Goal.DoesNotExist:
+                return None, JsonResponse({'error': 'Goal not found'}, status=404)
+
+    if 'category_id' in data:
+        if data['category_id'] is None:
+            fks['category'] = None
+        else:
+            try:
+                fks['category'] = Category.objects.get(id=data['category_id'], user=user)
+            except Category.DoesNotExist:
+                return None, JsonResponse({'error': 'Category not found'}, status=404)
+
+    if 'template_id' in data:
+        if data['template_id'] is None:
+            fks['template'] = None
+        else:
+            try:
+                fks['template'] = ActivityTemplate.objects.get(id=data['template_id'], user=user)
+            except ActivityTemplate.DoesNotExist:
+                return None, JsonResponse({'error': 'ActivityTemplate not found'}, status=404)
+
+    return fks, None
+
+
+
+
+class ActivitiesListView(AuthMixin, View):
+    def get(self, request):
+        qs = Activity.objects.filter(user=self.user).order_by('day_entry__date', 'order', 'created_at')
+
+        day_entry_id = request.GET.get('day_entry_id')
+        status = request.GET.get('status')
+        activity_type = request.GET.get('activity_type')
+
+        if day_entry_id:
+            qs = qs.filter(day_entry_id=day_entry_id)
+        if status:
+            qs = qs.filter(status=status)
+        if activity_type:
+            qs = qs.filter(activity_type=activity_type)
+
+        return JsonResponse({'activities': [_activity_json(a) for a in qs]})
+
+
+    def post(self, request):
+        try:
+            data = json.loads(request.body)
+        except (json.JSONDecodeError, ValueError):
+            return JsonResponse({'error': 'Invalid JSON'}, status=400)
+
+        title = data.get('title', '').strip()
+        if not title:
+            return JsonResponse({'error': 'title is required'}, status=400)
+
+        activity_type = data.get('activity_type', 'task')
+        if activity_type not in _VALID_ACTIVITY_TYPES:
+            return JsonResponse({'error': f'Invalid activity_type. Allowed: {sorted(_VALID_ACTIVITY_TYPES)}'}, status=400)
+
+        status_val = data.get('status', 'pending')
+        if status_val not in _VALID_STATUSES:
+            return JsonResponse({'error': f'Invalid status. Allowed: {sorted(_VALID_STATUSES)}'}, status=400)
+
+        estimated_minutes = None
+        if data.get('estimated_minutes') is not None:
+            estimated_minutes, err = _validate_positive_int(data['estimated_minutes'], 'estimated_minutes')
+            if err:
+                return err
+
+        actual_minutes = None
+        if data.get('actual_minutes') is not None:
+            actual_minutes, err = _validate_positive_int(data['actual_minutes'], 'actual_minutes')
+            if err:
+                return err
+        elif status_val == 'completed' and estimated_minutes:
+            actual_minutes = estimated_minutes
+
+        fks, err = _resolve_activity_fks(data, self.user)
+        if err:
+            return err
+
+        activity = Activity.objects.create(
+            user=self.user,
+            day_entry=fks.get('day_entry'),
+            goal=fks.get('goal'),
+            category=fks.get('category'),
+            template=fks.get('template'),
+            title=title,
+            description=data.get('description') or None,
+            activity_type=activity_type,
+            status=status_val,
+            estimated_minutes=estimated_minutes,
+            actual_minutes=actual_minutes,
+            start_time=data.get('start_time') or None,
+            end_time=data.get('end_time') or None,
+            order=data.get('order', 0),
+        )
+        activity = Activity.objects.get(id=activity.id)
+        return JsonResponse(_activity_json(activity), status=201)
+
+
+
+class ActivitiesDetailView(AuthMixin, View):
+    def _get_activity(self, id):
+        try:
+            return Activity.objects.get(id=id, user=self.user), None
+        except Activity.DoesNotExist:
+            return None, JsonResponse({'error': 'Activity not found'}, status=404)
+
+    def get(self, request, id):
+        activity, err = self._get_activity(id)
+        if err:
+            return err
+        return JsonResponse(_activity_json(activity))
+
+
+    def put(self, request, id):
+        activity, err = self._get_activity(id)
+        if err:
+            return err
+
+        try:
+            data = json.loads(request.body)
+        except (json.JSONDecodeError, ValueError):
+            return JsonResponse({'error': 'Invalid JSON'}, status=400)
+
+        if 'title' in data:
+            title = data['title'].strip()
+            if not title:
+                return JsonResponse({'error': 'title cannot be empty'}, status=400)
+            activity.title = title
+
+        if 'activity_type' in data:
+            if data['activity_type'] not in _VALID_ACTIVITY_TYPES:
+                return JsonResponse({'error': f'Invalid activity_type. Allowed: {sorted(_VALID_ACTIVITY_TYPES)}'}, status=400)
+            activity.activity_type = data['activity_type']
+
+        if 'status' in data:
+            if data['status'] not in _VALID_STATUSES:
+                return JsonResponse({'error': f'Invalid status. Allowed: {sorted(_VALID_STATUSES)}'}, status=400)
+            activity.status = data['status']
+
+        if 'estimated_minutes' in data:
+            if data['estimated_minutes'] is None:
+                activity.estimated_minutes = None
+            else:
+                v, err = _validate_positive_int(data['estimated_minutes'], 'estimated_minutes')
+                if err:
+                    return err
+                activity.estimated_minutes = v
+
+        if 'actual_minutes' in data:
+            if data['actual_minutes'] is None:
+                activity.actual_minutes = None
+            else:
+                v, err = _validate_positive_int(data['actual_minutes'], 'actual_minutes')
+                if err:
+                    return err
+                activity.actual_minutes = v
+        elif activity.status == 'completed' and activity.actual_minutes is None and activity.estimated_minutes:
+            activity.actual_minutes = activity.estimated_minutes
+
+        fks, err = _resolve_activity_fks(data, self.user)
+        if err:
+            return err
+        for attr, val in fks.items():
+            setattr(activity, attr, val)
+
+        for field in ('description', 'start_time', 'end_time', 'order'):
+            if field in data:
+                setattr(activity, field, data[field] if data[field] != '' else None)
+
+        activity.save()
+        activity.refresh_from_db()
+        return JsonResponse(_activity_json(activity))
+
+
+    def delete(self, request, id):
+        activity, err = self._get_activity(id)
+        if err:
+            return err
+        activity.delete()
+        return JsonResponse({'message': 'Activity deleted'})
+
+
+
+
+class DayEntryActivitiesView(AuthMixin, View):
+    def _get_entry(self, id):
+        try:
+            return DayEntry.objects.get(id=id, user=self.user), None
+        except DayEntry.DoesNotExist:
+            return None, JsonResponse({'error': 'DayEntry not found'}, status=404)
+
+    def get(self, request, id):
+        entry, err = self._get_entry(id)
+        if err:
+            return err
+        _generate_recurring_for_day(entry)
+        qs = (Activity.objects
+              .filter(user=self.user, day_entry=entry)
+              .order_by('order', 'created_at'))
+        return JsonResponse({'activities': [_activity_json(a) for a in qs]})
+
+
+    def post(self, request, id):
+        entry, err = self._get_entry(id)
+        if err:
+            return err
+
+        try:
+            data = json.loads(request.body)
+        except (json.JSONDecodeError, ValueError):
+            return JsonResponse({'error': 'Invalid JSON'}, status=400)
+
+        title = data.get('title', '').strip()
+        if not title:
+            return JsonResponse({'error': 'title is required'}, status=400)
+
+        activity_type = data.get('activity_type', 'task')
+        if activity_type not in _VALID_ACTIVITY_TYPES:
+            return JsonResponse({'error': f'Invalid activity_type. Allowed: {sorted(_VALID_ACTIVITY_TYPES)}'}, status=400)
+
+        status_val = data.get('status', 'pending')
+        if status_val not in _VALID_STATUSES:
+            return JsonResponse({'error': f'Invalid status. Allowed: {sorted(_VALID_STATUSES)}'}, status=400)
+
+        estimated_minutes = None
+        if data.get('estimated_minutes') is not None:
+            estimated_minutes, err = _validate_positive_int(data['estimated_minutes'], 'estimated_minutes')
+            if err:
+                return err
+
+        actual_minutes = None
+        if data.get('actual_minutes') is not None:
+            actual_minutes, err = _validate_positive_int(data['actual_minutes'], 'actual_minutes')
+            if err:
+                return err
+        elif status_val == 'completed' and estimated_minutes:
+            actual_minutes = estimated_minutes
+
+        data_copy = {k: v for k, v in data.items() if k != 'day_entry_id'}
+        fks, err = _resolve_activity_fks(data_copy, self.user)
+        if err:
+            return err
+
+        template = fks.get('template')
+        if template and Activity.objects.filter(user=self.user, day_entry=entry, template=template).exists():
+            return JsonResponse({'error': 'Activity from this template already exists for this day'}, status=409)
+
+        activity = Activity.objects.create(
+            user=self.user,
+            day_entry=entry,
+            goal=fks.get('goal'),
+            category=fks.get('category'),
+            template=template,
+            title=title,
+            description=data.get('description') or None,
+            activity_type=activity_type,
+            status=status_val,
+            estimated_minutes=estimated_minutes,
+            actual_minutes=actual_minutes,
+            start_time=data.get('start_time') or None,
+            end_time=data.get('end_time') or None,
+            order=data.get('order', 0),
+        )
+        activity = Activity.objects.get(id=activity.id)
+        return JsonResponse(_activity_json(activity), status=201)
+
+
+
+
+class DayEntryGenerateRecurringView(AuthMixin, View):
+    def post(self, request, id):
+        try:
+            entry = DayEntry.objects.get(id=id, user=self.user)
+        except DayEntry.DoesNotExist:
+            return JsonResponse({'error': 'DayEntry not found'}, status=404)
+
+        created_ids = _generate_recurring_for_day(entry)
+        activities = Activity.objects.filter(id__in=created_ids).order_by('order', 'created_at')
+        return JsonResponse({
+            'generated': len(created_ids),
+            'activities': [_activity_json(a) for a in activities],
+        })
