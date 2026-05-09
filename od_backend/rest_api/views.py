@@ -920,3 +920,31 @@ def _day_entry_json(entry):
         'created_at': entry.created_at.isoformat(),
         'updated_at': entry.updated_at.isoformat(),
     }
+
+
+def _apply_close_fields(entry, data, close=False):
+    if 'status' in data:
+        entry.status = data['status']
+    elif close and not entry.is_closed:
+        entry.status = 'completed'
+
+    if 'progress_percent' in data:
+        try:
+            pct = float(data['progress_percent'])
+        except (TypeError, ValueError):
+            return JsonResponse({'error': 'progress_percent must be a number'}, status=400)
+        if not (0 <= pct <= 100):
+            return JsonResponse({'error': 'progress_percent must be between 0 and 100'}, status=400)
+        entry.progress_percent = pct
+    elif close and entry.status == 'completed':
+        entry.progress_percent = 100
+
+    for field in ('result_text', 'reflection_text', 'failure_reason', 'dedication_minutes'):
+        if field in data:
+            entry.__setattr__(field, data[field] if data[field] != '' else None)
+
+    if close:
+        entry.is_closed = True
+        entry.closed_at = timezone.now()
+
+    return None
