@@ -1182,3 +1182,23 @@ def _activity_json(activity):
         'created_at': activity.created_at.isoformat(),
         'updated_at': activity.updated_at.isoformat(),
     }
+
+
+def _rule_matches_date(rule, date):
+    freq = rule.frequency
+    if freq == 'none':
+        return False
+    if freq == 'daily':
+        return True
+    if freq == 'weekdays':
+        return date.weekday() < 5
+
+    day_abbr = _DAY_ABBR[date.weekday()]
+
+    if freq == 'weekly':
+        return day_abbr in rule.days_of_week if rule.days_of_week else True
+    if freq == 'monthly':
+        return date.day == rule.day_of_month if rule.day_of_month else True
+    if freq == 'custom':
+        return bool(rule.days_of_week) and day_abbr in rule.days_of_week
+    return False
