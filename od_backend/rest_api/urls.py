@@ -23,4 +23,5 @@ urlpatterns = [
     path('day-entries/<int:id>/close/', views.DayEntriesCloseView.as_view(), name='day_entries_close'),
     path('day-entries/<int:id>/draft-close/', views.DayEntriesDraftCloseView.as_view(), name='day_entries_draft_close'),
     path('activities/', views.ActivitiesListView.as_view(), name='activities_list'),
+    path('activities/<int:id>/', views.ActivitiesDetailView.as_view(), name='activities_detail'),
 ]
