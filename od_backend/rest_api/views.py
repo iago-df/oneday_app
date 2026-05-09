@@ -1123,3 +1123,27 @@ class DayEntriesCloseView(AuthMixin, View):
 
         entry.save()
         return JsonResponse(_day_entry_json(entry))
+
+
+
+class DayEntriesDraftCloseView(AuthMixin, View):
+    def put(self, request, id):
+        try:
+            entry = DayEntry.objects.select_related('main_goal').get(id=id, user=self.user)
+        except DayEntry.DoesNotExist:
+            return JsonResponse({'error': 'DayEntry not found'}, status=404)
+
+        if entry.is_closed:
+            return JsonResponse({'error': 'DayEntry is already closed'}, status=409)
+
+        try:
+            data = json.loads(request.body) if request.body else {}
+        except (json.JSONDecodeError, ValueError):
+            return JsonResponse({'error': 'Invalid JSON'}, status=400)
+
+        err_resp = _apply_close_fields(entry, data, close=False)
+        if err_resp:
+            return err_resp
+
+        entry.save()
+        return JsonResponse(_day_entry_json(entry))
