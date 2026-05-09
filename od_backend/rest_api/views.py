@@ -1152,5 +1152,12 @@ class DayEntriesDraftCloseView(AuthMixin, View):
 
 
 
+
 _VALID_STATUSES = {'pending', 'in_progress', 'completed', 'partial', 'failed'}
 _DAY_ABBR = ['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT', 'SUN']
+
+
+def _safe_time(val):
+    if val is None:
+        return None
+    return val if isinstance(val, str) else val.isoformat()
