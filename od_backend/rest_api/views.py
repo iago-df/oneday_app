@@ -8,7 +8,7 @@ from django.views.decorators.csrf import csrf_exempt
 from django.contrib.auth.models import User
 
 from .helpers import get_authenticated_user
-from .models import AuthToken, UserProfile, Category, Tag, Goal
+from .models import AuthToken, UserProfile, Category, Tag, Goal, RecurrenceRule, ActivityTemplate
 
 
 class AuthMixin:
@@ -566,3 +566,322 @@ class GoalsDetailView(AuthMixin, View):
             return err
         goal.delete()
         return JsonResponse({'message': 'Goal deleted'})
+
+
+
+
+
+_VALID_FREQUENCIES = {'none', 'daily', 'weekdays', 'weekly', 'monthly', 'custom'}
+_VALID_DAYS = {'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT', 'SUN'}
+
+
+def _validate_days_of_week(days):
+    if not isinstance(days, list):
+        return 'days_of_week must be a list'
+    invalid = [d for d in days if not isinstance(d, str) or d not in _VALID_DAYS]
+    if invalid:
+        return f'Invalid days_of_week values: {invalid}. Allowed: {sorted(_VALID_DAYS)}'
+    return None
+
+
+def _safe_date(val):
+    if val is None:
+        return None
+    return val if isinstance(val, str) else val.isoformat()
+
+
+def _recurrence_rule_json(rule):
+    return {
+        'id': rule.id,
+        'frequency': rule.frequency,
+        'interval': rule.interval,
+        'days_of_week': rule.days_of_week,
+        'day_of_month': rule.day_of_month,
+        'start_date': _safe_date(rule.start_date),
+        'end_date': _safe_date(rule.end_date),
+        'is_active': rule.is_active,
+        'created_at': rule.created_at.isoformat(),
+        'updated_at': rule.updated_at.isoformat(),
+    }
+
+
+class RecurrenceRulesListView(AuthMixin, View):
+    def get(self, request):
+        qs = RecurrenceRule.objects.filter(user=self.user).order_by('-created_at')
+        return JsonResponse({'recurrence_rules': [_recurrence_rule_json(r) for r in qs]})
+
+    def post(self, request):
+        try:
+            data = json.loads(request.body)
+        except (json.JSONDecodeError, ValueError):
+            return JsonResponse({'error': 'Invalid JSON'}, status=400)
+
+        frequency = data.get('frequency', 'none')
+        if frequency not in _VALID_FREQUENCIES:
+            return JsonResponse({'error': f'Invalid frequency. Allowed: {sorted(_VALID_FREQUENCIES)}'}, status=400)
+
+        interval = data.get('interval', 1)
+        try:
+            interval = int(interval)
+            if interval < 1:
+                raise ValueError
+        except (TypeError, ValueError):
+            return JsonResponse({'error': 'interval must be a positive integer'}, status=400)
+
+        days_of_week = data.get('days_of_week')
+        if days_of_week is not None:
+            err_msg = _validate_days_of_week(days_of_week)
+            if err_msg:
+                return JsonResponse({'error': err_msg}, status=400)
+
+        rule = RecurrenceRule.objects.create(
+            user=self.user,
+            frequency=frequency,
+            interval=interval,
+            days_of_week=days_of_week,
+            day_of_month=data.get('day_of_month') or None,
+            start_date=data.get('start_date') or None,
+            end_date=data.get('end_date') or None,
+            is_active=data.get('is_active', True),
+        )
+        return JsonResponse(_recurrence_rule_json(rule), status=201)
+
+
+
+
+class RecurrenceRulesDetailView(AuthMixin, View):
+    def _get_rule(self, id):
+        try:
+            return RecurrenceRule.objects.get(id=id, user=self.user), None
+        except RecurrenceRule.DoesNotExist:
+            return None, JsonResponse({'error': 'RecurrenceRule not found'}, status=404)
+
+    def get(self, request, id):
+        rule, err = self._get_rule(id)
+        if err:
+            return err
+        return JsonResponse(_recurrence_rule_json(rule))
+
+
+    def put(self, request, id):
+        rule, err = self._get_rule(id)
+        if err:
+            return err
+
+        try:
+            data = json.loads(request.body)
+        except (json.JSONDecodeError, ValueError):
+            return JsonResponse({'error': 'Invalid JSON'}, status=400)
+
+        if 'frequency' in data:
+            if data['frequency'] not in _VALID_FREQUENCIES:
+                return JsonResponse({'error': f'Invalid frequency. Allowed: {sorted(_VALID_FREQUENCIES)}'}, status=400)
+            rule.frequency = data['frequency']
+
+        if 'interval' in data:
+            try:
+                interval = int(data['interval'])
+                if interval < 1:
+                    raise ValueError
+            except (TypeError, ValueError):
+                return JsonResponse({'error': 'interval must be a positive integer'}, status=400)
+            rule.interval = interval
+
+        if 'days_of_week' in data:
+            if data['days_of_week'] is None:
+                rule.days_of_week = None
+            else:
+                err_msg = _validate_days_of_week(data['days_of_week'])
+                if err_msg:
+                    return JsonResponse({'error': err_msg}, status=400)
+                rule.days_of_week = data['days_of_week']
+
+        for field in ('day_of_month', 'start_date', 'end_date', 'is_active'):
+            if field in data:
+                setattr(rule, field, data[field] if data[field] != '' else None)
+
+        rule.save()
+        return JsonResponse(_recurrence_rule_json(rule))
+
+
+    def delete(self, request, id):
+        rule, err = self._get_rule(id)
+        if err:
+            return err
+        rule.delete()
+        return JsonResponse({'message': 'RecurrenceRule deleted'})
+
+
+
+
+
+_VALID_ACTIVITY_TYPES = {'task', 'session', 'habit', 'event', 'deep_work'}
+
+
+def _activity_template_json(template):
+    return {
+        'id': template.id,
+        'title': template.title,
+        'description': template.description,
+        'activity_type': template.activity_type,
+        'estimated_minutes': template.estimated_minutes,
+        'is_active': template.is_active,
+        'category_id': template.category_id,
+        'recurrence_rule_id': template.recurrence_rule_id,
+        'recurrence_rule': _recurrence_rule_json(template.recurrence_rule) if template.recurrence_rule else None,
+        'created_at': template.created_at.isoformat(),
+        'updated_at': template.updated_at.isoformat(),
+    }
+
+
+def _resolve_template_fks(data, user, current_category=None, current_rule=None):
+    category = current_category
+    rule = current_rule
+
+    if 'category_id' in data:
+        if data['category_id'] is None:
+            category = None
+        else:
+            try:
+                category = Category.objects.get(id=data['category_id'], user=user)
+            except Category.DoesNotExist:
+                return None, None, JsonResponse({'error': 'Category not found'}, status=404)
+
+    if 'recurrence_rule_id' in data:
+        if data['recurrence_rule_id'] is None:
+            rule = None
+        else:
+            try:
+                rule = RecurrenceRule.objects.get(id=data['recurrence_rule_id'], user=user)
+            except RecurrenceRule.DoesNotExist:
+                return None, None, JsonResponse({'error': 'RecurrenceRule not found'}, status=404)
+
+    return category, rule, None
+
+
+class ActivityTemplatesListView(AuthMixin, View):
+    def get(self, request):
+        qs = (ActivityTemplate.objects
+              .filter(user=self.user)
+              .select_related('recurrence_rule')
+              .order_by('-created_at'))
+        return JsonResponse({'activity_templates': [_activity_template_json(t) for t in qs]})
+
+
+    def post(self, request):
+        try:
+            data = json.loads(request.body)
+        except (json.JSONDecodeError, ValueError):
+            return JsonResponse({'error': 'Invalid JSON'}, status=400)
+
+        title = data.get('title', '').strip()
+        if not title:
+            return JsonResponse({'error': 'title is required'}, status=400)
+
+        activity_type = data.get('activity_type', 'task')
+        if activity_type not in _VALID_ACTIVITY_TYPES:
+            return JsonResponse({'error': f'Invalid activity_type. Allowed: {sorted(_VALID_ACTIVITY_TYPES)}'}, status=400)
+
+        estimated_minutes = data.get('estimated_minutes')
+        if estimated_minutes is not None:
+            try:
+                estimated_minutes = int(estimated_minutes)
+                if estimated_minutes < 1:
+                    raise ValueError
+            except (TypeError, ValueError):
+                return JsonResponse({'error': 'estimated_minutes must be a positive integer'}, status=400)
+
+        category, rule, err = _resolve_template_fks(data, self.user)
+        if err:
+            return err
+
+        template = ActivityTemplate.objects.create(
+            user=self.user,
+            title=title,
+            description=data.get('description') or None,
+            activity_type=activity_type,
+            estimated_minutes=estimated_minutes,
+            is_active=data.get('is_active', True),
+            category=category,
+            recurrence_rule=rule,
+        )
+        template = ActivityTemplate.objects.select_related('recurrence_rule').get(id=template.id)
+        return JsonResponse(_activity_template_json(template), status=201)
+
+
+
+class ActivityTemplatesDetailView(AuthMixin, View):
+    def _get_template(self, id):
+        try:
+            return (ActivityTemplate.objects
+                    .select_related('recurrence_rule')
+                    .get(id=id, user=self.user)), None
+        except ActivityTemplate.DoesNotExist:
+            return None, JsonResponse({'error': 'ActivityTemplate not found'}, status=404)
+
+    def get(self, request, id):
+        template, err = self._get_template(id)
+        if err:
+            return err
+        return JsonResponse(_activity_template_json(template))
+
+
+    def put(self, request, id):
+        template, err = self._get_template(id)
+        if err:
+            return err
+
+        try:
+            data = json.loads(request.body)
+        except (json.JSONDecodeError, ValueError):
+            return JsonResponse({'error': 'Invalid JSON'}, status=400)
+
+        if 'title' in data:
+            title = data['title'].strip()
+            if not title:
+                return JsonResponse({'error': 'title cannot be empty'}, status=400)
+            template.title = title
+
+        if 'activity_type' in data:
+            if data['activity_type'] not in _VALID_ACTIVITY_TYPES:
+                return JsonResponse({'error': f'Invalid activity_type. Allowed: {sorted(_VALID_ACTIVITY_TYPES)}'}, status=400)
+            template.activity_type = data['activity_type']
+
+        if 'estimated_minutes' in data:
+            if data['estimated_minutes'] is None:
+                template.estimated_minutes = None
+            else:
+                try:
+                    em = int(data['estimated_minutes'])
+                    if em < 1:
+                        raise ValueError
+                except (TypeError, ValueError):
+                    return JsonResponse({'error': 'estimated_minutes must be a positive integer'}, status=400)
+                template.estimated_minutes = em
+
+        category, rule, err = _resolve_template_fks(
+            data, self.user,
+            current_category=template.category,
+            current_rule=template.recurrence_rule,
+        )
+        if err:
+            return err
+        template.category = category
+        template.recurrence_rule = rule
+
+        if 'description' in data:
+            template.description = data['description'] or None
+        if 'is_active' in data:
+            template.is_active = bool(data['is_active'])
+
+        template.save()
+        template.refresh_from_db()
+        return JsonResponse(_activity_template_json(template))
+
+
+    def delete(self, request, id):
+        template, err = self._get_template(id)
+        if err:
+            return err
+        template.delete()
+        return JsonResponse({'message': 'ActivityTemplate deleted'})

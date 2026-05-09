@@ -13,4 +13,8 @@ urlpatterns = [
     path('tags/<int:id>/', views.TagsDetailView.as_view(), name='tags_detail'),
     path('goals/', views.GoalsListView.as_view(), name='goals_list'),
     path('goals/<int:id>/', views.GoalsDetailView.as_view(), name='goals_detail'),
+    path('recurrence-rules/', views.RecurrenceRulesListView.as_view(), name='recurrence_rules_list'),
+    path('recurrence-rules/<int:id>/', views.RecurrenceRulesDetailView.as_view(), name='recurrence_rules_detail'),
+    path('activity-templates/', views.ActivityTemplatesListView.as_view(), name='activity_templates_list'),
+    path('activity-templates/<int:id>/', views.ActivityTemplatesDetailView.as_view(), name='activity_templates_detail'),
 ]
