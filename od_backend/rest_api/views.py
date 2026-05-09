@@ -1310,6 +1310,23 @@ def _resolve_activity_fks(data, user):
 
 
 class ActivitiesListView(AuthMixin, View):
+    def get(self, request):
+        qs = Activity.objects.filter(user=self.user).order_by('day_entry__date', 'order', 'created_at')
+
+        day_entry_id = request.GET.get('day_entry_id')
+        status = request.GET.get('status')
+        activity_type = request.GET.get('activity_type')
+
+        if day_entry_id:
+            qs = qs.filter(day_entry_id=day_entry_id)
+        if status:
+            qs = qs.filter(status=status)
+        if activity_type:
+            qs = qs.filter(activity_type=activity_type)
+
+        return JsonResponse({'activities': [_activity_json(a) for a in qs]})
+
+
     def post(self, request):
         try:
             data = json.loads(request.body)
