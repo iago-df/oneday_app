@@ -901,3 +901,22 @@ def _main_goal_summary(goal):
         'progress_percent': goal.progress_percent,
         'deadline': goal.deadline.isoformat() if goal.deadline else None,
     }
+
+
+def _day_entry_json(entry):
+    return {
+        'id': entry.id,
+        'date': entry.date.isoformat(),
+        'status': entry.status,
+        'progress_percent': entry.progress_percent,
+        'dedication_minutes': entry.dedication_minutes,
+        'result_text': entry.result_text,
+        'reflection_text': entry.reflection_text,
+        'failure_reason': entry.failure_reason,
+        'is_closed': entry.is_closed,
+        'closed_at': entry.closed_at.isoformat() if entry.closed_at else None,
+        'main_goal_id': entry.main_goal_id,
+        'main_goal': _main_goal_summary(entry.main_goal),
+        'created_at': entry.created_at.isoformat(),
+        'updated_at': entry.updated_at.isoformat(),
+    }
