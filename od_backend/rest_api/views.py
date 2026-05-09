@@ -1398,6 +1398,67 @@ class ActivitiesDetailView(AuthMixin, View):
         return JsonResponse(_activity_json(activity))
 
 
+    def put(self, request, id):
+        activity, err = self._get_activity(id)
+        if err:
+            return err
+
+        try:
+            data = json.loads(request.body)
+        except (json.JSONDecodeError, ValueError):
+            return JsonResponse({'error': 'Invalid JSON'}, status=400)
+
+        if 'title' in data:
+            title = data['title'].strip()
+            if not title:
+                return JsonResponse({'error': 'title cannot be empty'}, status=400)
+            activity.title = title
+
+        if 'activity_type' in data:
+            if data['activity_type'] not in _VALID_ACTIVITY_TYPES:
+                return JsonResponse({'error': f'Invalid activity_type. Allowed: {sorted(_VALID_ACTIVITY_TYPES)}'}, status=400)
+            activity.activity_type = data['activity_type']
+
+        if 'status' in data:
+            if data['status'] not in _VALID_STATUSES:
+                return JsonResponse({'error': f'Invalid status. Allowed: {sorted(_VALID_STATUSES)}'}, status=400)
+            activity.status = data['status']
+
+        if 'estimated_minutes' in data:
+            if data['estimated_minutes'] is None:
+                activity.estimated_minutes = None
+            else:
+                v, err = _validate_positive_int(data['estimated_minutes'], 'estimated_minutes')
+                if err:
+                    return err
+                activity.estimated_minutes = v
+
+        if 'actual_minutes' in data:
+            if data['actual_minutes'] is None:
+                activity.actual_minutes = None
+            else:
+                v, err = _validate_positive_int(data['actual_minutes'], 'actual_minutes')
+                if err:
+                    return err
+                activity.actual_minutes = v
+        elif activity.status == 'completed' and activity.actual_minutes is None and activity.estimated_minutes:
+            activity.actual_minutes = activity.estimated_minutes
+
+        fks, err = _resolve_activity_fks(data, self.user)
+        if err:
+            return err
+        for attr, val in fks.items():
+            setattr(activity, attr, val)
+
+        for field in ('description', 'start_time', 'end_time', 'order'):
+            if field in data:
+                setattr(activity, field, data[field] if data[field] != '' else None)
+
+        activity.save()
+        activity.refresh_from_db()
+        return JsonResponse(_activity_json(activity))
+
+
     def delete(self, request, id):
         activity, err = self._get_activity(id)
         if err:
