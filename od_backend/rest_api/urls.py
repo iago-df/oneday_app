@@ -19,4 +19,5 @@ urlpatterns = [
     path('activity-templates/<int:id>/', views.ActivityTemplatesDetailView.as_view(), name='activity_templates_detail'),
     path('day-entries/', views.DayEntriesListView.as_view(), name='day_entries_list'),
     path('day-entries/today/', views.DayEntriesTodayView.as_view(), name='day_entries_today'),
+    path('day-entries/<int:id>/', views.DayEntriesItemView.as_view(), name='day_entries_item'),
 ]

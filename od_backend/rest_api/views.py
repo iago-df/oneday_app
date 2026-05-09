@@ -1035,3 +1035,18 @@ class DayEntriesTodayView(AuthMixin, View):
         )
         entry = DayEntry.objects.select_related('main_goal').get(id=entry.id)
         return JsonResponse(_day_entry_json(entry))
+
+
+
+class DayEntriesItemView(AuthMixin, View):
+    def _get_entry(self, id):
+        try:
+            return DayEntry.objects.select_related('main_goal').get(id=id, user=self.user), None
+        except DayEntry.DoesNotExist:
+            return None, JsonResponse({'error': 'DayEntry not found'}, status=404)
+
+    def get(self, request, id):
+        entry, err = self._get_entry(id)
+        if err:
+            return err
+        return JsonResponse(_day_entry_json(entry))
