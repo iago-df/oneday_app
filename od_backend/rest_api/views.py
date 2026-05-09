@@ -1022,3 +1022,16 @@ class DayEntriesListView(AuthMixin, View):
 
         entry = DayEntry.objects.select_related('main_goal').get(id=entry.id)
         return JsonResponse(_day_entry_json(entry), status=201)
+
+
+
+class DayEntriesTodayView(AuthMixin, View):
+    def get(self, request):
+        today = timezone.now().date()
+        entry, _ = DayEntry.objects.get_or_create(
+            user=self.user,
+            date=today,
+            defaults={'status': 'empty'},
+        )
+        entry = DayEntry.objects.select_related('main_goal').get(id=entry.id)
+        return JsonResponse(_day_entry_json(entry))
