@@ -1465,3 +1465,23 @@ class ActivitiesDetailView(AuthMixin, View):
             return err
         activity.delete()
         return JsonResponse({'message': 'Activity deleted'})
+
+
+
+
+class DayEntryActivitiesView(AuthMixin, View):
+    def _get_entry(self, id):
+        try:
+            return DayEntry.objects.get(id=id, user=self.user), None
+        except DayEntry.DoesNotExist:
+            return None, JsonResponse({'error': 'DayEntry not found'}, status=404)
+
+    def get(self, request, id):
+        entry, err = self._get_entry(id)
+        if err:
+            return err
+        _generate_recurring_for_day(entry)
+        qs = (Activity.objects
+              .filter(user=self.user, day_entry=entry)
+              .order_by('order', 'created_at'))
+        return JsonResponse({'activities': [_activity_json(a) for a in qs]})
