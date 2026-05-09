@@ -1161,3 +1161,24 @@ def _safe_time(val):
     if val is None:
         return None
     return val if isinstance(val, str) else val.isoformat()
+
+
+def _activity_json(activity):
+    return {
+        'id': activity.id,
+        'title': activity.title,
+        'description': activity.description,
+        'activity_type': activity.activity_type,
+        'status': activity.status,
+        'estimated_minutes': activity.estimated_minutes,
+        'actual_minutes': activity.actual_minutes,
+        'start_time': _safe_time(activity.start_time),
+        'end_time': _safe_time(activity.end_time),
+        'order': activity.order,
+        'day_entry_id': activity.day_entry_id,
+        'goal_id': activity.goal_id,
+        'category_id': activity.category_id,
+        'template_id': activity.template_id,
+        'created_at': activity.created_at.isoformat(),
+        'updated_at': activity.updated_at.isoformat(),
+    }
