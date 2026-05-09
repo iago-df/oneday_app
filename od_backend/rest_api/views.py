@@ -6,6 +6,7 @@ from django.utils.decorators import method_decorator
 from django.views import View
 from django.views.decorators.csrf import csrf_exempt
 from django.contrib.auth.models import User
+from django.utils import timezone
 
 from .helpers import get_authenticated_user
 from .models import AuthToken, UserProfile, Category, Tag, Goal, RecurrenceRule, ActivityTemplate
