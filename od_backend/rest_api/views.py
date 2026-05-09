@@ -1381,3 +1381,18 @@ class ActivitiesListView(AuthMixin, View):
         )
         activity = Activity.objects.get(id=activity.id)
         return JsonResponse(_activity_json(activity), status=201)
+
+
+
+class ActivitiesDetailView(AuthMixin, View):
+    def _get_activity(self, id):
+        try:
+            return Activity.objects.get(id=id, user=self.user), None
+        except Activity.DoesNotExist:
+            return None, JsonResponse({'error': 'Activity not found'}, status=404)
+
+    def get(self, request, id):
+        activity, err = self._get_activity(id)
+        if err:
+            return err
+        return JsonResponse(_activity_json(activity))
