@@ -1550,3 +1550,20 @@ class DayEntryActivitiesView(AuthMixin, View):
         )
         activity = Activity.objects.get(id=activity.id)
         return JsonResponse(_activity_json(activity), status=201)
+
+
+
+
+class DayEntryGenerateRecurringView(AuthMixin, View):
+    def post(self, request, id):
+        try:
+            entry = DayEntry.objects.get(id=id, user=self.user)
+        except DayEntry.DoesNotExist:
+            return JsonResponse({'error': 'DayEntry not found'}, status=404)
+
+        created_ids = _generate_recurring_for_day(entry)
+        activities = Activity.objects.filter(id__in=created_ids).order_by('order', 'created_at')
+        return JsonResponse({
+            'generated': len(created_ids),
+            'activities': [_activity_json(a) for a in activities],
+        })

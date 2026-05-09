@@ -25,4 +25,5 @@ urlpatterns = [
     path('activities/', views.ActivitiesListView.as_view(), name='activities_list'),
     path('activities/<int:id>/', views.ActivitiesDetailView.as_view(), name='activities_detail'),
     path('day-entries/<int:id>/activities/', views.DayEntryActivitiesView.as_view(), name='day_entry_activities'),
+    path('day-entries/<int:id>/generate-recurring/', views.DayEntryGenerateRecurringView.as_view(), name='day_entry_generate_recurring'),
 ]
