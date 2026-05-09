@@ -9,7 +9,7 @@ from django.contrib.auth.models import User
 from django.utils import timezone
 
 from .helpers import get_authenticated_user
-from .models import AuthToken, UserProfile, Category, Tag, Goal, RecurrenceRule, ActivityTemplate, DayEntry
+from .models import AuthToken, UserProfile, Category, Tag, Goal, RecurrenceRule, ActivityTemplate, DayEntry, Activity
 
 
 class AuthMixin:
@@ -1305,3 +1305,62 @@ def _resolve_activity_fks(data, user):
                 return None, JsonResponse({'error': 'ActivityTemplate not found'}, status=404)
 
     return fks, None
+
+
+
+
+class ActivitiesListView(AuthMixin, View):
+    def post(self, request):
+        try:
+            data = json.loads(request.body)
+        except (json.JSONDecodeError, ValueError):
+            return JsonResponse({'error': 'Invalid JSON'}, status=400)
+
+        title = data.get('title', '').strip()
+        if not title:
+            return JsonResponse({'error': 'title is required'}, status=400)
+
+        activity_type = data.get('activity_type', 'task')
+        if activity_type not in _VALID_ACTIVITY_TYPES:
+            return JsonResponse({'error': f'Invalid activity_type. Allowed: {sorted(_VALID_ACTIVITY_TYPES)}'}, status=400)
+
+        status_val = data.get('status', 'pending')
+        if status_val not in _VALID_STATUSES:
+            return JsonResponse({'error': f'Invalid status. Allowed: {sorted(_VALID_STATUSES)}'}, status=400)
+
+        estimated_minutes = None
+        if data.get('estimated_minutes') is not None:
+            estimated_minutes, err = _validate_positive_int(data['estimated_minutes'], 'estimated_minutes')
+            if err:
+                return err
+
+        actual_minutes = None
+        if data.get('actual_minutes') is not None:
+            actual_minutes, err = _validate_positive_int(data['actual_minutes'], 'actual_minutes')
+            if err:
+                return err
+        elif status_val == 'completed' and estimated_minutes:
+            actual_minutes = estimated_minutes
+
+        fks, err = _resolve_activity_fks(data, self.user)
+        if err:
+            return err
+
+        activity = Activity.objects.create(
+            user=self.user,
+            day_entry=fks.get('day_entry'),
+            goal=fks.get('goal'),
+            category=fks.get('category'),
+            template=fks.get('template'),
+            title=title,
+            description=data.get('description') or None,
+            activity_type=activity_type,
+            status=status_val,
+            estimated_minutes=estimated_minutes,
+            actual_minutes=actual_minutes,
+            start_time=data.get('start_time') or None,
+            end_time=data.get('end_time') or None,
+            order=data.get('order', 0),
+        )
+        activity = Activity.objects.get(id=activity.id)
+        return JsonResponse(_activity_json(activity), status=201)
