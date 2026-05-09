@@ -1202,3 +1202,54 @@ def _rule_matches_date(rule, date):
     if freq == 'custom':
         return bool(rule.days_of_week) and day_abbr in rule.days_of_week
     return False
+
+
+def _generate_recurring_for_day(entry):
+    user = entry.user
+    date = entry.date
+    if isinstance(date, str):
+        date = dt.date.fromisoformat(date)
+
+    templates = (ActivityTemplate.objects
+                 .filter(user=user, is_active=True, recurrence_rule__isnull=False)
+                 .select_related('recurrence_rule', 'category'))
+
+    existing_template_ids = set(
+        Activity.objects.filter(user=user, day_entry=entry, template__isnull=False)
+        .values_list('template_id', flat=True)
+    )
+
+    created_ids = []
+    for template in templates:
+        rule = template.recurrence_rule
+        if not rule.is_active:
+            continue
+        if template.id in existing_template_ids:
+            continue
+
+        if rule.start_date:
+            start = rule.start_date if isinstance(rule.start_date, dt.date) else dt.date.fromisoformat(rule.start_date)
+            if date < start:
+                continue
+        if rule.end_date:
+            end = rule.end_date if isinstance(rule.end_date, dt.date) else dt.date.fromisoformat(rule.end_date)
+            if date > end:
+                continue
+
+        if not _rule_matches_date(rule, date):
+            continue
+
+        activity = Activity.objects.create(
+            user=user,
+            day_entry=entry,
+            template=template,
+            title=template.title,
+            description=template.description,
+            activity_type=template.activity_type,
+            estimated_minutes=template.estimated_minutes,
+            category=template.category,
+            status='pending',
+        )
+        created_ids.append(activity.id)
+
+    return created_ids
