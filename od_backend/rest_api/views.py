@@ -1091,3 +1091,11 @@ class DayEntriesItemView(AuthMixin, View):
 
         entry.save()
         return JsonResponse(_day_entry_json(entry))
+
+
+    def delete(self, request, id):
+        entry, err = self._get_entry(id)
+        if err:
+            return err
+        entry.delete()
+        return JsonResponse({'message': 'DayEntry deleted'})
