@@ -1264,3 +1264,44 @@ def _validate_positive_int(value, field_name):
     except (TypeError, ValueError):
         return None, JsonResponse({'error': f'{field_name} must be a positive integer'}, status=400)
 
+
+def _resolve_activity_fks(data, user):
+    fks = {}
+
+    if 'day_entry_id' in data:
+        if data['day_entry_id'] is None:
+            fks['day_entry'] = None
+        else:
+            try:
+                fks['day_entry'] = DayEntry.objects.get(id=data['day_entry_id'], user=user)
+            except DayEntry.DoesNotExist:
+                return None, JsonResponse({'error': 'DayEntry not found'}, status=404)
+
+    if 'goal_id' in data:
+        if data['goal_id'] is None:
+            fks['goal'] = None
+        else:
+            try:
+                fks['goal'] = Goal.objects.get(id=data['goal_id'], user=user)
+            except Goal.DoesNotExist:
+                return None, JsonResponse({'error': 'Goal not found'}, status=404)
+
+    if 'category_id' in data:
+        if data['category_id'] is None:
+            fks['category'] = None
+        else:
+            try:
+                fks['category'] = Category.objects.get(id=data['category_id'], user=user)
+            except Category.DoesNotExist:
+                return None, JsonResponse({'error': 'Category not found'}, status=404)
+
+    if 'template_id' in data:
+        if data['template_id'] is None:
+            fks['template'] = None
+        else:
+            try:
+                fks['template'] = ActivityTemplate.objects.get(id=data['template_id'], user=user)
+            except ActivityTemplate.DoesNotExist:
+                return None, JsonResponse({'error': 'ActivityTemplate not found'}, status=404)
+
+    return fks, None
