@@ -6,9 +6,10 @@ from django.utils.decorators import method_decorator
 from django.views import View
 from django.views.decorators.csrf import csrf_exempt
 from django.contrib.auth.models import User
+from django.utils import timezone
 
 from .helpers import get_authenticated_user
-from .models import AuthToken, UserProfile, Category, Tag, Goal, RecurrenceRule, ActivityTemplate
+from .models import AuthToken, UserProfile, Category, Tag, Goal, RecurrenceRule, ActivityTemplate, DayEntry
 
 
 class AuthMixin:
@@ -885,3 +886,264 @@ class ActivityTemplatesDetailView(AuthMixin, View):
             return err
         template.delete()
         return JsonResponse({'message': 'ActivityTemplate deleted'})
+
+
+
+
+
+def _main_goal_summary(goal):
+    if not goal:
+        return None
+    return {
+        'id': goal.id,
+        'title': goal.title,
+        'status': goal.status,
+        'goal_type': goal.goal_type,
+        'progress_percent': goal.progress_percent,
+        'deadline': goal.deadline.isoformat() if goal.deadline else None,
+    }
+
+
+def _day_entry_json(entry):
+    return {
+        'id': entry.id,
+        'date': entry.date.isoformat(),
+        'status': entry.status,
+        'progress_percent': entry.progress_percent,
+        'dedication_minutes': entry.dedication_minutes,
+        'result_text': entry.result_text,
+        'reflection_text': entry.reflection_text,
+        'failure_reason': entry.failure_reason,
+        'is_closed': entry.is_closed,
+        'closed_at': entry.closed_at.isoformat() if entry.closed_at else None,
+        'main_goal_id': entry.main_goal_id,
+        'main_goal': _main_goal_summary(entry.main_goal),
+        'created_at': entry.created_at.isoformat(),
+        'updated_at': entry.updated_at.isoformat(),
+    }
+
+
+def _apply_close_fields(entry, data, close=False):
+    if 'status' in data:
+        entry.status = data['status']
+    elif close and not entry.is_closed:
+        entry.status = 'completed'
+
+    if 'progress_percent' in data:
+        try:
+            pct = float(data['progress_percent'])
+        except (TypeError, ValueError):
+            return JsonResponse({'error': 'progress_percent must be a number'}, status=400)
+        if not (0 <= pct <= 100):
+            return JsonResponse({'error': 'progress_percent must be between 0 and 100'}, status=400)
+        entry.progress_percent = pct
+    elif close and entry.status == 'completed':
+        entry.progress_percent = 100
+
+    for field in ('result_text', 'reflection_text', 'failure_reason', 'dedication_minutes'):
+        if field in data:
+            entry.__setattr__(field, data[field] if data[field] != '' else None)
+
+    if close:
+        entry.is_closed = True
+        entry.closed_at = timezone.now()
+
+    return None
+
+
+
+class DayEntriesListView(AuthMixin, View):
+    def get(self, request):
+        qs = DayEntry.objects.filter(user=self.user).select_related('main_goal').order_by('-date')
+
+        date_exact = request.GET.get('date')
+        from_date = request.GET.get('from')
+        to_date = request.GET.get('to')
+        status = request.GET.get('status')
+
+        if date_exact:
+            qs = qs.filter(date=date_exact)
+        if from_date:
+            qs = qs.filter(date__gte=from_date)
+        if to_date:
+            qs = qs.filter(date__lte=to_date)
+        if status:
+            qs = qs.filter(status=status)
+
+        return JsonResponse({'day_entries': [_day_entry_json(e) for e in qs]})
+
+
+    def post(self, request):
+        try:
+            data = json.loads(request.body)
+        except (json.JSONDecodeError, ValueError):
+            return JsonResponse({'error': 'Invalid JSON'}, status=400)
+
+        date_str = data.get('date', '').strip()
+        if not date_str:
+            return JsonResponse({'error': 'date is required'}, status=400)
+
+        if DayEntry.objects.filter(user=self.user, date=date_str).exists():
+            return JsonResponse({'error': 'A DayEntry for this date already exists'}, status=409)
+
+        main_goal = None
+        if data.get('main_goal_id'):
+            try:
+                main_goal = Goal.objects.get(id=data['main_goal_id'], user=self.user)
+            except Goal.DoesNotExist:
+                return JsonResponse({'error': 'Goal not found'}, status=404)
+
+        status_val = data.get('status', 'empty')
+        progress_percent = data.get('progress_percent', 0)
+        if status_val == 'completed' and 'progress_percent' not in data:
+            progress_percent = 100
+        else:
+            try:
+                progress_percent = float(progress_percent)
+            except (TypeError, ValueError):
+                return JsonResponse({'error': 'progress_percent must be a number'}, status=400)
+            if not (0 <= progress_percent <= 100):
+                return JsonResponse({'error': 'progress_percent must be between 0 and 100'}, status=400)
+
+        try:
+            entry = DayEntry.objects.create(
+                user=self.user,
+                date=date_str,
+                main_goal=main_goal,
+                status=status_val,
+                progress_percent=progress_percent,
+                dedication_minutes=data.get('dedication_minutes') or None,
+                result_text=data.get('result_text') or None,
+                reflection_text=data.get('reflection_text') or None,
+                failure_reason=data.get('failure_reason') or None,
+            )
+        except Exception:
+            return JsonResponse({'error': 'Invalid date format. Use YYYY-MM-DD'}, status=400)
+
+        entry = DayEntry.objects.select_related('main_goal').get(id=entry.id)
+        return JsonResponse(_day_entry_json(entry), status=201)
+
+
+
+class DayEntriesTodayView(AuthMixin, View):
+    def get(self, request):
+        today = timezone.now().date()
+        entry, _ = DayEntry.objects.get_or_create(
+            user=self.user,
+            date=today,
+            defaults={'status': 'empty'},
+        )
+        entry = DayEntry.objects.select_related('main_goal').get(id=entry.id)
+        return JsonResponse(_day_entry_json(entry))
+
+
+
+class DayEntriesItemView(AuthMixin, View):
+    def _get_entry(self, id):
+        try:
+            return DayEntry.objects.select_related('main_goal').get(id=id, user=self.user), None
+        except DayEntry.DoesNotExist:
+            return None, JsonResponse({'error': 'DayEntry not found'}, status=404)
+
+    def get(self, request, id):
+        entry, err = self._get_entry(id)
+        if err:
+            return err
+        return JsonResponse(_day_entry_json(entry))
+
+
+    def put(self, request, id):
+        entry, err = self._get_entry(id)
+        if err:
+            return err
+
+        try:
+            data = json.loads(request.body)
+        except (json.JSONDecodeError, ValueError):
+            return JsonResponse({'error': 'Invalid JSON'}, status=400)
+
+        if 'main_goal_id' in data:
+            if data['main_goal_id'] is None:
+                entry.main_goal = None
+            else:
+                try:
+                    entry.main_goal = Goal.objects.get(id=data['main_goal_id'], user=self.user)
+                except Goal.DoesNotExist:
+                    return JsonResponse({'error': 'Goal not found'}, status=404)
+
+        if 'progress_percent' in data:
+            try:
+                pct = float(data['progress_percent'])
+            except (TypeError, ValueError):
+                return JsonResponse({'error': 'progress_percent must be a number'}, status=400)
+            if not (0 <= pct <= 100):
+                return JsonResponse({'error': 'progress_percent must be between 0 and 100'}, status=400)
+            entry.progress_percent = pct
+
+        if 'status' in data:
+            entry.status = data['status']
+            if data['status'] == 'completed' and 'progress_percent' not in data and entry.progress_percent == 0:
+                entry.progress_percent = 100
+
+        for field in ('dedication_minutes', 'result_text', 'reflection_text', 'failure_reason'):
+            if field in data:
+                entry.__setattr__(field, data[field] if data[field] != '' else None)
+
+        entry.save()
+        return JsonResponse(_day_entry_json(entry))
+
+
+    def delete(self, request, id):
+        entry, err = self._get_entry(id)
+        if err:
+            return err
+        entry.delete()
+        return JsonResponse({'message': 'DayEntry deleted'})
+
+
+
+class DayEntriesCloseView(AuthMixin, View):
+    def put(self, request, id):
+        try:
+            entry = DayEntry.objects.select_related('main_goal').get(id=id, user=self.user)
+        except DayEntry.DoesNotExist:
+            return JsonResponse({'error': 'DayEntry not found'}, status=404)
+
+        if entry.is_closed:
+            return JsonResponse({'error': 'DayEntry is already closed'}, status=409)
+
+        try:
+            data = json.loads(request.body) if request.body else {}
+        except (json.JSONDecodeError, ValueError):
+            return JsonResponse({'error': 'Invalid JSON'}, status=400)
+
+        err_resp = _apply_close_fields(entry, data, close=True)
+        if err_resp:
+            return err_resp
+
+        entry.save()
+        return JsonResponse(_day_entry_json(entry))
+
+
+
+class DayEntriesDraftCloseView(AuthMixin, View):
+    def put(self, request, id):
+        try:
+            entry = DayEntry.objects.select_related('main_goal').get(id=id, user=self.user)
+        except DayEntry.DoesNotExist:
+            return JsonResponse({'error': 'DayEntry not found'}, status=404)
+
+        if entry.is_closed:
+            return JsonResponse({'error': 'DayEntry is already closed'}, status=409)
+
+        try:
+            data = json.loads(request.body) if request.body else {}
+        except (json.JSONDecodeError, ValueError):
+            return JsonResponse({'error': 'Invalid JSON'}, status=400)
+
+        err_resp = _apply_close_fields(entry, data, close=False)
+        if err_resp:
+            return err_resp
+
+        entry.save()
+        return JsonResponse(_day_entry_json(entry))
