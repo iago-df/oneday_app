@@ -17,4 +17,5 @@ urlpatterns = [
     path('recurrence-rules/<int:id>/', views.RecurrenceRulesDetailView.as_view(), name='recurrence_rules_detail'),
     path('activity-templates/', views.ActivityTemplatesListView.as_view(), name='activity_templates_list'),
     path('activity-templates/<int:id>/', views.ActivityTemplatesDetailView.as_view(), name='activity_templates_detail'),
+    path('day-entries/', views.DayEntriesListView.as_view(), name='day_entries_list'),
 ]

@@ -9,7 +9,7 @@ from django.contrib.auth.models import User
 from django.utils import timezone
 
 from .helpers import get_authenticated_user
-from .models import AuthToken, UserProfile, Category, Tag, Goal, RecurrenceRule, ActivityTemplate
+from .models import AuthToken, UserProfile, Category, Tag, Goal, RecurrenceRule, ActivityTemplate, DayEntry
 
 
 class AuthMixin:
@@ -949,3 +949,25 @@ def _apply_close_fields(entry, data, close=False):
         entry.closed_at = timezone.now()
 
     return None
+
+
+
+class DayEntriesListView(AuthMixin, View):
+    def get(self, request):
+        qs = DayEntry.objects.filter(user=self.user).select_related('main_goal').order_by('-date')
+
+        date_exact = request.GET.get('date')
+        from_date = request.GET.get('from')
+        to_date = request.GET.get('to')
+        status = request.GET.get('status')
+
+        if date_exact:
+            qs = qs.filter(date=date_exact)
+        if from_date:
+            qs = qs.filter(date__gte=from_date)
+        if to_date:
+            qs = qs.filter(date__lte=to_date)
+        if status:
+            qs = qs.filter(status=status)
+
+        return JsonResponse({'day_entries': [_day_entry_json(e) for e in qs]})
