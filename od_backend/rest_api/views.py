@@ -1396,3 +1396,11 @@ class ActivitiesDetailView(AuthMixin, View):
         if err:
             return err
         return JsonResponse(_activity_json(activity))
+
+
+    def delete(self, request, id):
+        activity, err = self._get_activity(id)
+        if err:
+            return err
+        activity.delete()
+        return JsonResponse({'message': 'Activity deleted'})
