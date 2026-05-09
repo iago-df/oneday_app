@@ -971,3 +971,54 @@ class DayEntriesListView(AuthMixin, View):
             qs = qs.filter(status=status)
 
         return JsonResponse({'day_entries': [_day_entry_json(e) for e in qs]})
+
+
+    def post(self, request):
+        try:
+            data = json.loads(request.body)
+        except (json.JSONDecodeError, ValueError):
+            return JsonResponse({'error': 'Invalid JSON'}, status=400)
+
+        date_str = data.get('date', '').strip()
+        if not date_str:
+            return JsonResponse({'error': 'date is required'}, status=400)
+
+        if DayEntry.objects.filter(user=self.user, date=date_str).exists():
+            return JsonResponse({'error': 'A DayEntry for this date already exists'}, status=409)
+
+        main_goal = None
+        if data.get('main_goal_id'):
+            try:
+                main_goal = Goal.objects.get(id=data['main_goal_id'], user=self.user)
+            except Goal.DoesNotExist:
+                return JsonResponse({'error': 'Goal not found'}, status=404)
+
+        status_val = data.get('status', 'empty')
+        progress_percent = data.get('progress_percent', 0)
+        if status_val == 'completed' and 'progress_percent' not in data:
+            progress_percent = 100
+        else:
+            try:
+                progress_percent = float(progress_percent)
+            except (TypeError, ValueError):
+                return JsonResponse({'error': 'progress_percent must be a number'}, status=400)
+            if not (0 <= progress_percent <= 100):
+                return JsonResponse({'error': 'progress_percent must be between 0 and 100'}, status=400)
+
+        try:
+            entry = DayEntry.objects.create(
+                user=self.user,
+                date=date_str,
+                main_goal=main_goal,
+                status=status_val,
+                progress_percent=progress_percent,
+                dedication_minutes=data.get('dedication_minutes') or None,
+                result_text=data.get('result_text') or None,
+                reflection_text=data.get('reflection_text') or None,
+                failure_reason=data.get('failure_reason') or None,
+            )
+        except Exception:
+            return JsonResponse({'error': 'Invalid date format. Use YYYY-MM-DD'}, status=400)
+
+        entry = DayEntry.objects.select_related('main_goal').get(id=entry.id)
+        return JsonResponse(_day_entry_json(entry), status=201)
