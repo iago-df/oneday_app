@@ -1147,3 +1147,10 @@ class DayEntriesDraftCloseView(AuthMixin, View):
 
         entry.save()
         return JsonResponse(_day_entry_json(entry))
+
+
+
+
+
+_VALID_STATUSES = {'pending', 'in_progress', 'completed', 'partial', 'failed'}
+_DAY_ABBR = ['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT', 'SUN']
