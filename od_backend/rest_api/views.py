@@ -1253,3 +1253,14 @@ def _generate_recurring_for_day(entry):
         created_ids.append(activity.id)
 
     return created_ids
+
+
+def _validate_positive_int(value, field_name):
+    try:
+        v = int(value)
+        if v < 1:
+            raise ValueError
+        return v, None
+    except (TypeError, ValueError):
+        return None, JsonResponse({'error': f'{field_name} must be a positive integer'}, status=400)
+
