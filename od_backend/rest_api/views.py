@@ -1050,3 +1050,44 @@ class DayEntriesItemView(AuthMixin, View):
         if err:
             return err
         return JsonResponse(_day_entry_json(entry))
+
+
+    def put(self, request, id):
+        entry, err = self._get_entry(id)
+        if err:
+            return err
+
+        try:
+            data = json.loads(request.body)
+        except (json.JSONDecodeError, ValueError):
+            return JsonResponse({'error': 'Invalid JSON'}, status=400)
+
+        if 'main_goal_id' in data:
+            if data['main_goal_id'] is None:
+                entry.main_goal = None
+            else:
+                try:
+                    entry.main_goal = Goal.objects.get(id=data['main_goal_id'], user=self.user)
+                except Goal.DoesNotExist:
+                    return JsonResponse({'error': 'Goal not found'}, status=404)
+
+        if 'progress_percent' in data:
+            try:
+                pct = float(data['progress_percent'])
+            except (TypeError, ValueError):
+                return JsonResponse({'error': 'progress_percent must be a number'}, status=400)
+            if not (0 <= pct <= 100):
+                return JsonResponse({'error': 'progress_percent must be between 0 and 100'}, status=400)
+            entry.progress_percent = pct
+
+        if 'status' in data:
+            entry.status = data['status']
+            if data['status'] == 'completed' and 'progress_percent' not in data and entry.progress_percent == 0:
+                entry.progress_percent = 100
+
+        for field in ('dedication_minutes', 'result_text', 'reflection_text', 'failure_reason'):
+            if field in data:
+                entry.__setattr__(field, data[field] if data[field] != '' else None)
+
+        entry.save()
+        return JsonResponse(_day_entry_json(entry))
