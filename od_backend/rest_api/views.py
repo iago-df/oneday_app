@@ -885,3 +885,19 @@ class ActivityTemplatesDetailView(AuthMixin, View):
             return err
         template.delete()
         return JsonResponse({'message': 'ActivityTemplate deleted'})
+
+
+
+
+
+def _main_goal_summary(goal):
+    if not goal:
+        return None
+    return {
+        'id': goal.id,
+        'title': goal.title,
+        'status': goal.status,
+        'goal_type': goal.goal_type,
+        'progress_percent': goal.progress_percent,
+        'deadline': goal.deadline.isoformat() if goal.deadline else None,
+    }
