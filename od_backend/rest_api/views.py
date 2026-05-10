@@ -1668,3 +1668,13 @@ class NotesDetailView(AuthMixin, View):
             return err
         note.delete()
         return JsonResponse({'message': 'Note deleted'})
+
+
+
+
+
+def _day_entry_detail_json(entry, activities=None):
+    data = _day_entry_json(entry)
+    data['activities'] = [_activity_json(a) for a in (activities or [])]
+    data['notes'] = [_note_json(n) for n in DayNote.objects.filter(day_entry=entry).order_by('order', 'created_at')]
+    return data
