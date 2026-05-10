@@ -9,7 +9,8 @@ from django.contrib.auth.models import User
 from django.utils import timezone
 
 from .helpers import get_authenticated_user
-from .models import AuthToken, UserProfile, Category, Tag, Goal, RecurrenceRule, ActivityTemplate, DayEntry, Activity
+from .models import AuthToken, UserProfile, Category, Tag, Goal, RecurrenceRule, ActivityTemplate, DayEntry, Activity, \
+    DayNote
 
 
 class AuthMixin:
@@ -1567,3 +1568,103 @@ class DayEntryGenerateRecurringView(AuthMixin, View):
             'generated': len(created_ids),
             'activities': [_activity_json(a) for a in activities],
         })
+
+
+
+
+
+
+def _note_json(note):
+    return {
+        'id': note.id,
+        'text': note.text,
+        'order': note.order,
+        'day_entry_id': note.day_entry_id,
+        'created_at': note.created_at.isoformat(),
+        'updated_at': note.updated_at.isoformat(),
+    }
+
+
+class DayEntryNotesView(AuthMixin, View):
+    def _get_entry(self, id):
+        try:
+            return DayEntry.objects.get(id=id, user=self.user), None
+        except DayEntry.DoesNotExist:
+            return None, JsonResponse({'error': 'DayEntry not found'}, status=404)
+
+    def get(self, request, id):
+        entry, err = self._get_entry(id)
+        if err:
+            return err
+        notes = DayNote.objects.filter(user=self.user, day_entry=entry).order_by('order', 'created_at')
+        return JsonResponse({'notes': [_note_json(n) for n in notes]})
+
+
+    def post(self, request, id):
+        entry, err = self._get_entry(id)
+        if err:
+            return err
+
+        try:
+            data = json.loads(request.body)
+        except (json.JSONDecodeError, ValueError):
+            return JsonResponse({'error': 'Invalid JSON'}, status=400)
+
+        text = data.get('text', '').strip()
+        if not text:
+            return JsonResponse({'error': 'text is required'}, status=400)
+
+        note = DayNote.objects.create(
+            user=self.user,
+            day_entry=entry,
+            text=text,
+            order=data.get('order', 0),
+        )
+        note.refresh_from_db()
+        return JsonResponse(_note_json(note), status=201)
+
+
+
+
+class NotesDetailView(AuthMixin, View):
+    def _get_note(self, id):
+        try:
+            return DayNote.objects.get(id=id, user=self.user), None
+        except DayNote.DoesNotExist:
+            return None, JsonResponse({'error': 'Note not found'}, status=404)
+
+    def get(self, request, id):
+        note, err = self._get_note(id)
+        if err:
+            return err
+        return JsonResponse(_note_json(note))
+
+    def put(self, request, id):
+        note, err = self._get_note(id)
+        if err:
+            return err
+
+        try:
+            data = json.loads(request.body)
+        except (json.JSONDecodeError, ValueError):
+            return JsonResponse({'error': 'Invalid JSON'}, status=400)
+
+        if 'text' in data:
+            text = data['text'].strip()
+            if not text:
+                return JsonResponse({'error': 'text cannot be empty'}, status=400)
+            note.text = text
+
+        if 'order' in data:
+            note.order = data['order']
+
+        note.save()
+        note.refresh_from_db()
+        return JsonResponse(_note_json(note))
+
+    def delete(self, request, id):
+        note, err = self._get_note(id)
+        if err:
+            return err
+        note.delete()
+        return JsonResponse({'message': 'Note deleted'})
