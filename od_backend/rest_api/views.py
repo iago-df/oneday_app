@@ -1639,6 +1639,29 @@ class NotesDetailView(AuthMixin, View):
             return err
         return JsonResponse(_note_json(note))
 
+    def put(self, request, id):
+        note, err = self._get_note(id)
+        if err:
+            return err
+
+        try:
+            data = json.loads(request.body)
+        except (json.JSONDecodeError, ValueError):
+            return JsonResponse({'error': 'Invalid JSON'}, status=400)
+
+        if 'text' in data:
+            text = data['text'].strip()
+            if not text:
+                return JsonResponse({'error': 'text cannot be empty'}, status=400)
+            note.text = text
+
+        if 'order' in data:
+            note.order = data['order']
+
+        note.save()
+        note.refresh_from_db()
+        return JsonResponse(_note_json(note))
+
     def delete(self, request, id):
         note, err = self._get_note(id)
         if err:
