@@ -1582,3 +1582,18 @@ def _note_json(note):
         'created_at': note.created_at.isoformat(),
         'updated_at': note.updated_at.isoformat(),
     }
+
+
+class DayEntryNotesView(AuthMixin, View):
+    def _get_entry(self, id):
+        try:
+            return DayEntry.objects.get(id=id, user=self.user), None
+        except DayEntry.DoesNotExist:
+            return None, JsonResponse({'error': 'DayEntry not found'}, status=404)
+
+    def get(self, request, id):
+        entry, err = self._get_entry(id)
+        if err:
+            return err
+        notes = DayNote.objects.filter(user=self.user, day_entry=entry).order_by('order', 'created_at')
+        return JsonResponse({'notes': [_note_json(n) for n in notes]})
