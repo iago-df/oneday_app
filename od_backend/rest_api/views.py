@@ -1693,3 +1693,314 @@ class DayEntriesDetailView(AuthMixin, View):
                       .select_related('category', 'template')
                       .order_by('order', 'created_at'))
         return JsonResponse(_day_entry_detail_json(entry, activities))
+
+
+
+
+
+
+def _parse_date_param(request, param):
+    raw = request.GET.get(param)
+    if not raw:
+        return None, None
+    try:
+        return dt.date.fromisoformat(raw), None
+    except ValueError:
+        return None, JsonResponse({'error': f'Invalid {param} date format. Use YYYY-MM-DD.'}, status=400)
+
+
+def _default_range():
+    today = dt.date.today()
+    return today.replace(day=1), today
+
+
+def _compute_streak(user, today):
+    closed_dates = set(
+        DayEntry.objects.filter(user=user, is_closed=True, status__in=['completed', 'partial'])
+        .values_list('date', flat=True)
+    )
+    streak = 0
+    day = today
+    while day in closed_dates:
+        streak += 1
+        day -= dt.timedelta(days=1)
+    return streak
+
+
+
+class StatsSummaryView(AuthMixin, View):
+    def get(self, request):
+        date_from, err = _parse_date_param(request, 'from')
+        if err:
+            return err
+        date_to, err = _parse_date_param(request, 'to')
+        if err:
+            return err
+        if not date_from or not date_to:
+            date_from, date_to = _default_range()
+
+        entries = DayEntry.objects.filter(user=self.user, date__gte=date_from, date__lte=date_to)
+        total_days = entries.count()
+        completed = entries.filter(status='completed').count()
+        partial = entries.filter(status='partial').count()
+        failed = entries.filter(status='failed').count()
+        closed = entries.filter(is_closed=True).count()
+
+        activities = Activity.objects.filter(
+            user=self.user,
+            day_entry__date__gte=date_from,
+            day_entry__date__lte=date_to,
+        )
+        total_activities = activities.count()
+        completed_activities = activities.filter(status='completed').count()
+        total_minutes = sum(v for v in activities.values_list('actual_minutes', flat=True) if v is not None)
+        avg_progress = sum(e.progress_percent for e in entries) / total_days if total_days else 0
+        streak = _compute_streak(self.user, dt.date.today())
+
+        return JsonResponse({
+            'period': {'from': date_from.isoformat(), 'to': date_to.isoformat()},
+            'days': {
+                'total': total_days,
+                'completed': completed,
+                'partial': partial,
+                'failed': failed,
+                'closed': closed,
+                'avg_progress_percent': round(avg_progress, 1),
+            },
+            'activities': {
+                'total': total_activities,
+                'completed': completed_activities,
+                'completion_rate': round(completed_activities / total_activities * 100, 1) if total_activities else 0,
+                'total_minutes': total_minutes,
+            },
+            'streak': streak,
+        })
+
+
+
+class StatsCategoriesView(AuthMixin, View):
+    def get(self, request):
+        date_from, err = _parse_date_param(request, 'from')
+        if err:
+            return err
+        date_to, err = _parse_date_param(request, 'to')
+        if err:
+            return err
+        if not date_from or not date_to:
+            date_from, date_to = _default_range()
+
+        activities = Activity.objects.filter(
+            user=self.user,
+            day_entry__date__gte=date_from,
+            day_entry__date__lte=date_to,
+        ).select_related('category')
+
+        cat_map = {}
+        uncategorized = {'id': None, 'name': 'Uncategorized', 'total': 0, 'completed': 0, 'minutes': 0}
+        for a in activities:
+            if a.category_id is None:
+                uncategorized['total'] += 1
+                if a.status == 'completed':
+                    uncategorized['completed'] += 1
+                if a.actual_minutes:
+                    uncategorized['minutes'] += a.actual_minutes
+            else:
+                key = a.category_id
+                if key not in cat_map:
+                    cat_map[key] = {
+                        'id': a.category_id,
+                        'name': a.category.name,
+                        'icon': a.category.icon,
+                        'color': a.category.color,
+                        'total': 0,
+                        'completed': 0,
+                        'minutes': 0,
+                    }
+                cat_map[key]['total'] += 1
+                if a.status == 'completed':
+                    cat_map[key]['completed'] += 1
+                if a.actual_minutes:
+                    cat_map[key]['minutes'] += a.actual_minutes
+
+        results = sorted(cat_map.values(), key=lambda x: x['minutes'], reverse=True)
+        if uncategorized['total'] > 0:
+            results.append(uncategorized)
+
+        for r in results:
+            r['completion_rate'] = round(r['completed'] / r['total'] * 100, 1) if r['total'] else 0
+
+        return JsonResponse({
+            'period': {'from': date_from.isoformat(), 'to': date_to.isoformat()},
+            'categories': results,
+        })
+
+
+
+class StatsStreakView(AuthMixin, View):
+    def get(self, request):
+        today = dt.date.today()
+        current_streak = _compute_streak(self.user, today)
+
+        closed_dates = sorted(
+            DayEntry.objects.filter(user=self.user, is_closed=True, status__in=['completed', 'partial'])
+            .values_list('date', flat=True)
+        )
+        best_streak = 0
+        run = 0
+        prev = None
+        for d in closed_dates:
+            if prev is not None and (d - prev).days == 1:
+                run += 1
+            else:
+                run = 1
+            if run > best_streak:
+                best_streak = run
+            prev = d
+
+        last_entry = DayEntry.objects.filter(user=self.user, is_closed=True).order_by('-date').first()
+
+        return JsonResponse({
+            'current_streak': current_streak,
+            'best_streak': best_streak,
+            'last_closed_date': last_entry.date.isoformat() if last_entry else None,
+        })
+
+
+
+
+class StatsWeeklyView(AuthMixin, View):
+    def get(self, request):
+        date_from, err = _parse_date_param(request, 'from')
+        if err:
+            return err
+        date_to, err = _parse_date_param(request, 'to')
+        if err:
+            return err
+        if not date_from or not date_to:
+            date_to = dt.date.today()
+            date_from = date_to - dt.timedelta(days=6)
+
+        entries = {
+            e.date: e
+            for e in DayEntry.objects.filter(user=self.user, date__gte=date_from, date__lte=date_to)
+        }
+        activities_by_date = {}
+        for a in Activity.objects.filter(
+            user=self.user,
+            day_entry__date__gte=date_from,
+            day_entry__date__lte=date_to,
+        ).select_related('day_entry'):
+            d = a.day_entry.date
+            activities_by_date.setdefault(d, []).append(a)
+
+        days = []
+        delta = date_to - date_from
+        for i in range(delta.days + 1):
+            d = date_from + dt.timedelta(days=i)
+            entry = entries.get(d)
+            day_acts = activities_by_date.get(d, [])
+            completed_acts = sum(1 for a in day_acts if a.status == 'completed')
+            minutes = sum(a.actual_minutes for a in day_acts if a.actual_minutes)
+            days.append({
+                'date': d.isoformat(),
+                'status': entry.status if entry else None,
+                'progress_percent': entry.progress_percent if entry else None,
+                'is_closed': entry.is_closed if entry else False,
+                'activities_total': len(day_acts),
+                'activities_completed': completed_acts,
+                'minutes': minutes,
+            })
+
+        return JsonResponse({
+            'period': {'from': date_from.isoformat(), 'to': date_to.isoformat()},
+            'days': days,
+        })
+
+
+
+
+class DashboardTodayView(AuthMixin, View):
+    def get(self, request):
+        today = dt.date.today()
+
+        entry, _ = DayEntry.objects.get_or_create(user=self.user, date=today)
+        entry = DayEntry.objects.select_related('main_goal').get(id=entry.id)
+        _generate_recurring_for_day(entry)
+
+        activities = (Activity.objects
+                      .filter(user=self.user, day_entry=entry)
+                      .select_related('category')
+                      .order_by('order', 'created_at'))
+
+        try:
+            profile = self.user.profile
+            profile_data = {'name': profile.name, 'avatar_url': profile.avatar_url}
+        except UserProfile.DoesNotExist:
+            profile_data = {'name': self.user.username, 'avatar_url': None}
+
+        streak = _compute_streak(self.user, today)
+        month_start = today.replace(day=1)
+        month_entries = DayEntry.objects.filter(user=self.user, date__gte=month_start, date__lte=today)
+        month_completed = month_entries.filter(status='completed').count()
+        month_total = month_entries.count()
+
+        activities_today = [_activity_json(a) for a in activities]
+        completed_today = sum(1 for a in activities_today if a['status'] == 'completed')
+
+        return JsonResponse({
+            'profile': profile_data,
+            'today': _day_entry_json(entry),
+            'activities_today': activities_today,
+            'quick_stats': {
+                'streak': streak,
+                'month_days_completed': month_completed,
+                'month_days_total': month_total,
+                'activities_completed_today': completed_today,
+                'activities_total_today': len(activities_today),
+            },
+        })
+
+
+
+
+
+class CalendarView(AuthMixin, View):
+    def get(self, request):
+        today = dt.date.today()
+        try:
+            year = int(request.GET.get('year', today.year))
+            month = int(request.GET.get('month', today.month))
+            if not (1 <= month <= 12):
+                raise ValueError
+        except (TypeError, ValueError):
+            return JsonResponse({'error': 'year and month must be valid integers (month 1–12)'}, status=400)
+
+        import calendar as _cal
+        _, days_in_month = _cal.monthrange(year, month)
+        date_from = dt.date(year, month, 1)
+        date_to = dt.date(year, month, days_in_month)
+
+        entries = {
+            e.date: e
+            for e in DayEntry.objects.filter(user=self.user, date__gte=date_from, date__lte=date_to)
+                             .select_related('main_goal')
+        }
+
+        days = []
+        for day_num in range(1, days_in_month + 1):
+            d = dt.date(year, month, day_num)
+            entry = entries.get(d)
+            days.append({
+                'date': d.isoformat(),
+                'has_entry': entry is not None,
+                'status': entry.status if entry else None,
+                'progress_percent': entry.progress_percent if entry else None,
+                'is_closed': entry.is_closed if entry else False,
+                'main_goal_title': entry.main_goal.title if (entry and entry.main_goal) else None,
+            })
+
+        return JsonResponse({
+            'year': year,
+            'month': month,
+            'days': days,
+        })
