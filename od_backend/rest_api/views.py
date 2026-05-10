@@ -1708,3 +1708,8 @@ def _parse_date_param(request, param):
     except ValueError:
         return None, JsonResponse({'error': f'Invalid {param} date format. Use YYYY-MM-DD.'}, status=400)
 
+
+def _default_range():
+    today = dt.date.today()
+    return today.replace(day=1), today
+
