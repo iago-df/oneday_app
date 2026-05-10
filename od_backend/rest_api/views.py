@@ -1959,3 +1959,48 @@ class DashboardTodayView(AuthMixin, View):
                 'activities_total_today': len(activities_today),
             },
         })
+
+
+
+
+
+class CalendarView(AuthMixin, View):
+    def get(self, request):
+        today = dt.date.today()
+        try:
+            year = int(request.GET.get('year', today.year))
+            month = int(request.GET.get('month', today.month))
+            if not (1 <= month <= 12):
+                raise ValueError
+        except (TypeError, ValueError):
+            return JsonResponse({'error': 'year and month must be valid integers (month 1–12)'}, status=400)
+
+        import calendar as _cal
+        _, days_in_month = _cal.monthrange(year, month)
+        date_from = dt.date(year, month, 1)
+        date_to = dt.date(year, month, days_in_month)
+
+        entries = {
+            e.date: e
+            for e in DayEntry.objects.filter(user=self.user, date__gte=date_from, date__lte=date_to)
+                             .select_related('main_goal')
+        }
+
+        days = []
+        for day_num in range(1, days_in_month + 1):
+            d = dt.date(year, month, day_num)
+            entry = entries.get(d)
+            days.append({
+                'date': d.isoformat(),
+                'has_entry': entry is not None,
+                'status': entry.status if entry else None,
+                'progress_percent': entry.progress_percent if entry else None,
+                'is_closed': entry.is_closed if entry else False,
+                'main_goal_title': entry.main_goal.title if (entry and entry.main_goal) else None,
+            })
+
+        return JsonResponse({
+            'year': year,
+            'month': month,
+            'days': days,
+        })
