@@ -1693,3 +1693,18 @@ class DayEntriesDetailView(AuthMixin, View):
                       .select_related('category', 'template')
                       .order_by('order', 'created_at'))
         return JsonResponse(_day_entry_detail_json(entry, activities))
+
+
+
+
+
+
+def _parse_date_param(request, param):
+    raw = request.GET.get(param)
+    if not raw:
+        return None, None
+    try:
+        return dt.date.fromisoformat(raw), None
+    except ValueError:
+        return None, JsonResponse({'error': f'Invalid {param} date format. Use YYYY-MM-DD.'}, status=400)
+
