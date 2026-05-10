@@ -1833,3 +1833,34 @@ class StatsCategoriesView(AuthMixin, View):
             'period': {'from': date_from.isoformat(), 'to': date_to.isoformat()},
             'categories': results,
         })
+
+
+
+class StatsStreakView(AuthMixin, View):
+    def get(self, request):
+        today = dt.date.today()
+        current_streak = _compute_streak(self.user, today)
+
+        closed_dates = sorted(
+            DayEntry.objects.filter(user=self.user, is_closed=True, status__in=['completed', 'partial'])
+            .values_list('date', flat=True)
+        )
+        best_streak = 0
+        run = 0
+        prev = None
+        for d in closed_dates:
+            if prev is not None and (d - prev).days == 1:
+                run += 1
+            else:
+                run = 1
+            if run > best_streak:
+                best_streak = run
+            prev = d
+
+        last_entry = DayEntry.objects.filter(user=self.user, is_closed=True).order_by('-date').first()
+
+        return JsonResponse({
+            'current_streak': current_streak,
+            'best_streak': best_streak,
+            'last_closed_date': last_entry.date.isoformat() if last_entry else None,
+        })

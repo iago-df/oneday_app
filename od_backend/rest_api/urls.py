@@ -31,4 +31,5 @@ urlpatterns = [
     path('day-entries/<int:id>/detail/', views.DayEntriesDetailView.as_view(), name='day_entries_detail_view'),
     path('stats/summary/', views.StatsSummaryView.as_view(), name='stats_summary'),
     path('stats/categories/', views.StatsCategoriesView.as_view(), name='stats_categories'),
+    path('stats/streak/', views.StatsStreakView.as_view(), name='stats_streak'),
 ]
