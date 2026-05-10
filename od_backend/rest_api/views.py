@@ -1864,3 +1864,54 @@ class StatsStreakView(AuthMixin, View):
             'best_streak': best_streak,
             'last_closed_date': last_entry.date.isoformat() if last_entry else None,
         })
+
+
+
+
+class StatsWeeklyView(AuthMixin, View):
+    def get(self, request):
+        date_from, err = _parse_date_param(request, 'from')
+        if err:
+            return err
+        date_to, err = _parse_date_param(request, 'to')
+        if err:
+            return err
+        if not date_from or not date_to:
+            date_to = dt.date.today()
+            date_from = date_to - dt.timedelta(days=6)
+
+        entries = {
+            e.date: e
+            for e in DayEntry.objects.filter(user=self.user, date__gte=date_from, date__lte=date_to)
+        }
+        activities_by_date = {}
+        for a in Activity.objects.filter(
+            user=self.user,
+            day_entry__date__gte=date_from,
+            day_entry__date__lte=date_to,
+        ).select_related('day_entry'):
+            d = a.day_entry.date
+            activities_by_date.setdefault(d, []).append(a)
+
+        days = []
+        delta = date_to - date_from
+        for i in range(delta.days + 1):
+            d = date_from + dt.timedelta(days=i)
+            entry = entries.get(d)
+            day_acts = activities_by_date.get(d, [])
+            completed_acts = sum(1 for a in day_acts if a.status == 'completed')
+            minutes = sum(a.actual_minutes for a in day_acts if a.actual_minutes)
+            days.append({
+                'date': d.isoformat(),
+                'status': entry.status if entry else None,
+                'progress_percent': entry.progress_percent if entry else None,
+                'is_closed': entry.is_closed if entry else False,
+                'activities_total': len(day_acts),
+                'activities_completed': completed_acts,
+                'minutes': minutes,
+            })
+
+        return JsonResponse({
+            'period': {'from': date_from.isoformat(), 'to': date_to.isoformat()},
+            'days': days,
+        })
