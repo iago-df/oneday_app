@@ -1915,3 +1915,47 @@ class StatsWeeklyView(AuthMixin, View):
             'period': {'from': date_from.isoformat(), 'to': date_to.isoformat()},
             'days': days,
         })
+
+
+
+
+class DashboardTodayView(AuthMixin, View):
+    def get(self, request):
+        today = dt.date.today()
+
+        entry, _ = DayEntry.objects.get_or_create(user=self.user, date=today)
+        entry = DayEntry.objects.select_related('main_goal').get(id=entry.id)
+        _generate_recurring_for_day(entry)
+
+        activities = (Activity.objects
+                      .filter(user=self.user, day_entry=entry)
+                      .select_related('category')
+                      .order_by('order', 'created_at'))
+
+        try:
+            profile = self.user.profile
+            profile_data = {'name': profile.name, 'avatar_url': profile.avatar_url}
+        except UserProfile.DoesNotExist:
+            profile_data = {'name': self.user.username, 'avatar_url': None}
+
+        streak = _compute_streak(self.user, today)
+        month_start = today.replace(day=1)
+        month_entries = DayEntry.objects.filter(user=self.user, date__gte=month_start, date__lte=today)
+        month_completed = month_entries.filter(status='completed').count()
+        month_total = month_entries.count()
+
+        activities_today = [_activity_json(a) for a in activities]
+        completed_today = sum(1 for a in activities_today if a['status'] == 'completed')
+
+        return JsonResponse({
+            'profile': profile_data,
+            'today': _day_entry_json(entry),
+            'activities_today': activities_today,
+            'quick_stats': {
+                'streak': streak,
+                'month_days_completed': month_completed,
+                'month_days_total': month_total,
+                'activities_completed_today': completed_today,
+                'activities_total_today': len(activities_today),
+            },
+        })

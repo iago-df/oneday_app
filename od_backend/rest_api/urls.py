@@ -33,4 +33,5 @@ urlpatterns = [
     path('stats/categories/', views.StatsCategoriesView.as_view(), name='stats_categories'),
     path('stats/streak/', views.StatsStreakView.as_view(), name='stats_streak'),
     path('stats/weekly/', views.StatsWeeklyView.as_view(), name='stats_weekly'),
+    path('dashboard/today/', views.DashboardTodayView.as_view(), name='dashboard_today'),
 ]
