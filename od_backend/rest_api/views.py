@@ -1567,3 +1567,18 @@ class DayEntryGenerateRecurringView(AuthMixin, View):
             'generated': len(created_ids),
             'activities': [_activity_json(a) for a in activities],
         })
+
+
+
+
+
+
+def _note_json(note):
+    return {
+        'id': note.id,
+        'text': note.text,
+        'order': note.order,
+        'day_entry_id': note.day_entry_id,
+        'created_at': note.created_at.isoformat(),
+        'updated_at': note.updated_at.isoformat(),
+    }
