@@ -1713,3 +1713,16 @@ def _default_range():
     today = dt.date.today()
     return today.replace(day=1), today
 
+
+def _compute_streak(user, today):
+    closed_dates = set(
+        DayEntry.objects.filter(user=user, is_closed=True, status__in=['completed', 'partial'])
+        .values_list('date', flat=True)
+    )
+    streak = 0
+    day = today
+    while day in closed_dates:
+        streak += 1
+        day -= dt.timedelta(days=1)
+    return streak
+
