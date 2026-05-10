@@ -1622,3 +1622,26 @@ class DayEntryNotesView(AuthMixin, View):
         )
         note.refresh_from_db()
         return JsonResponse(_note_json(note), status=201)
+
+
+
+
+class NotesDetailView(AuthMixin, View):
+    def _get_note(self, id):
+        try:
+            return DayNote.objects.get(id=id, user=self.user), None
+        except DayNote.DoesNotExist:
+            return None, JsonResponse({'error': 'Note not found'}, status=404)
+
+    def get(self, request, id):
+        note, err = self._get_note(id)
+        if err:
+            return err
+        return JsonResponse(_note_json(note))
+
+    def delete(self, request, id):
+        note, err = self._get_note(id)
+        if err:
+            return err
+        note.delete()
+        return JsonResponse({'message': 'Note deleted'})
