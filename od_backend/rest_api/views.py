@@ -1726,3 +1726,54 @@ def _compute_streak(user, today):
         day -= dt.timedelta(days=1)
     return streak
 
+
+
+class StatsSummaryView(AuthMixin, View):
+    def get(self, request):
+        date_from, err = _parse_date_param(request, 'from')
+        if err:
+            return err
+        date_to, err = _parse_date_param(request, 'to')
+        if err:
+            return err
+        if not date_from or not date_to:
+            date_from, date_to = _default_range()
+
+        entries = DayEntry.objects.filter(user=self.user, date__gte=date_from, date__lte=date_to)
+        total_days = entries.count()
+        completed = entries.filter(status='completed').count()
+        partial = entries.filter(status='partial').count()
+        failed = entries.filter(status='failed').count()
+        closed = entries.filter(is_closed=True).count()
+
+        activities = Activity.objects.filter(
+            user=self.user,
+            day_entry__date__gte=date_from,
+            day_entry__date__lte=date_to,
+        )
+        total_activities = activities.count()
+        completed_activities = activities.filter(status='completed').count()
+        total_minutes = sum(v for v in activities.values_list('actual_minutes', flat=True) if v is not None)
+        avg_progress = sum(e.progress_percent for e in entries) / total_days if total_days else 0
+        streak = _compute_streak(self.user, dt.date.today())
+
+        return JsonResponse({
+            'period': {'from': date_from.isoformat(), 'to': date_to.isoformat()},
+            'days': {
+                'total': total_days,
+                'completed': completed,
+                'partial': partial,
+                'failed': failed,
+                'closed': closed,
+                'avg_progress_percent': round(avg_progress, 1),
+            },
+            'activities': {
+                'total': total_activities,
+                'completed': completed_activities,
+                'completion_rate': round(completed_activities / total_activities * 100, 1) if total_activities else 0,
+                'total_minutes': total_minutes,
+            },
+            'streak': streak,
+        })
+
+
