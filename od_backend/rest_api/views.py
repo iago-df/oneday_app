@@ -1777,3 +1777,59 @@ class StatsSummaryView(AuthMixin, View):
         })
 
 
+
+class StatsCategoriesView(AuthMixin, View):
+    def get(self, request):
+        date_from, err = _parse_date_param(request, 'from')
+        if err:
+            return err
+        date_to, err = _parse_date_param(request, 'to')
+        if err:
+            return err
+        if not date_from or not date_to:
+            date_from, date_to = _default_range()
+
+        activities = Activity.objects.filter(
+            user=self.user,
+            day_entry__date__gte=date_from,
+            day_entry__date__lte=date_to,
+        ).select_related('category')
+
+        cat_map = {}
+        uncategorized = {'id': None, 'name': 'Uncategorized', 'total': 0, 'completed': 0, 'minutes': 0}
+        for a in activities:
+            if a.category_id is None:
+                uncategorized['total'] += 1
+                if a.status == 'completed':
+                    uncategorized['completed'] += 1
+                if a.actual_minutes:
+                    uncategorized['minutes'] += a.actual_minutes
+            else:
+                key = a.category_id
+                if key not in cat_map:
+                    cat_map[key] = {
+                        'id': a.category_id,
+                        'name': a.category.name,
+                        'icon': a.category.icon,
+                        'color': a.category.color,
+                        'total': 0,
+                        'completed': 0,
+                        'minutes': 0,
+                    }
+                cat_map[key]['total'] += 1
+                if a.status == 'completed':
+                    cat_map[key]['completed'] += 1
+                if a.actual_minutes:
+                    cat_map[key]['minutes'] += a.actual_minutes
+
+        results = sorted(cat_map.values(), key=lambda x: x['minutes'], reverse=True)
+        if uncategorized['total'] > 0:
+            results.append(uncategorized)
+
+        for r in results:
+            r['completion_rate'] = round(r['completed'] / r['total'] * 100, 1) if r['total'] else 0
+
+        return JsonResponse({
+            'period': {'from': date_from.isoformat(), 'to': date_to.isoformat()},
+            'categories': results,
+        })
