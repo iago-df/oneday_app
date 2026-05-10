@@ -9,7 +9,8 @@ from django.contrib.auth.models import User
 from django.utils import timezone
 
 from .helpers import get_authenticated_user
-from .models import AuthToken, UserProfile, Category, Tag, Goal, RecurrenceRule, ActivityTemplate, DayEntry, Activity
+from .models import AuthToken, UserProfile, Category, Tag, Goal, RecurrenceRule, ActivityTemplate, DayEntry, Activity, \
+    DayNote
 
 
 class AuthMixin:
@@ -1597,3 +1598,27 @@ class DayEntryNotesView(AuthMixin, View):
             return err
         notes = DayNote.objects.filter(user=self.user, day_entry=entry).order_by('order', 'created_at')
         return JsonResponse({'notes': [_note_json(n) for n in notes]})
+
+
+    def post(self, request, id):
+        entry, err = self._get_entry(id)
+        if err:
+            return err
+
+        try:
+            data = json.loads(request.body)
+        except (json.JSONDecodeError, ValueError):
+            return JsonResponse({'error': 'Invalid JSON'}, status=400)
+
+        text = data.get('text', '').strip()
+        if not text:
+            return JsonResponse({'error': 'text is required'}, status=400)
+
+        note = DayNote.objects.create(
+            user=self.user,
+            day_entry=entry,
+            text=text,
+            order=data.get('order', 0),
+        )
+        note.refresh_from_db()
+        return JsonResponse(_note_json(note), status=201)
