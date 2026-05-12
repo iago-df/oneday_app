@@ -19,29 +19,3 @@ media/
 
 #ide
 .idea/
-
-
-
-
-
-
-
-# Python
-__pycache__/
-*.pyc
-*.pyo
-*.pyd
-
-# Virtual env
-venv/
-.env
-
-# DB
-db.sqlite3
-
-# Django
-staticfiles/
-media/
-
-# IDE
-.idea/
