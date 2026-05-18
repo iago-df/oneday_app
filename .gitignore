@@ -1,44 +1,37 @@
-#python cache
+# === BACKEND (Django) ===
 __pycache__/
 *.pyc
 *.pyo
 *.pyd
-
-#entorno virtual
 venv/
-
-#variables del entorno
 .env
-
-#base de dstos
 db.sqlite3
-
-#django
 staticfiles/
 media/
 
-#ide
+# === IDEs y Sistemas Operativos ===
 .idea/
-
-
-
-# frontend / android
-.gradle/
-build/
-app/build/
-local.properties
-*.apk
-*.aab
-
-# node/react native/expo if used
-node_modules/
-.expo/
-dist/
-.env.local
-
-# mac/windows
+.vscode/
+*.iml
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
 .DS_Store
 Thumbs.db
 
-# logs
+# === FRONTEND (Android / Gradle) ===
+**/build/
+**/.gradle/
+**/local.properties
+**/captures/
+**/.externalNativeBuild/
+**/.cxx/
+*.apk
+*.aab
+
+# === OTROS (por si acaso) ===
+node_modules/
+.expo/
+dist/
 *.log
