@@ -22,6 +22,9 @@
         <item name="android:windowLightStatusBar">true</item>
     </style>
 
+    <style name="BottomNavTextAppearance" parent="TextAppearance.AppCompat">
+        <item name="android:textSize">10sp</item>
+    </style>
 
     <style name="Theme.OneDay.Welcome" parent="Theme.OneDay">
         <item name="android:windowBackground">@color/colorPrimary</item>

@@ -30,6 +30,13 @@
         </activity>
 
         <activity
+            android:name=".LoginActivity"
+            android:exported="false"
+            android:theme="@style/Theme.OneDay.Auth"
+            android:windowSoftInputMode="adjustResize">
+        </activity>
+
+        <activity
             android:name=".RegisterActivity"
             android:exported="false"
             android:theme="@style/Theme.OneDay.Auth"
