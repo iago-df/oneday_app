@@ -261,85 +261,6 @@ class CategoriesDetailView(AuthMixin, View):
 
 
 
-
-def _tag_json(t):
-    return {
-        'id': t.id,
-        'name': t.name,
-        'created_at': t.created_at.isoformat(),
-        'updated_at': t.updated_at.isoformat(),
-    }
-
-
-class TagsListView(AuthMixin, View):
-    def get(self, request):
-        qs = Tag.objects.filter(user=self.user).order_by('name')
-        return JsonResponse({'tags': [_tag_json(t) for t in qs]})
-
-
-    def post(self, request):
-        try:
-            data = json.loads(request.body)
-        except (json.JSONDecodeError, ValueError):
-            return JsonResponse({'error': 'Invalid JSON'}, status=400)
-
-        name = data.get('name', '').strip()
-        if not name:
-            return JsonResponse({'error': 'name is required'}, status=400)
-
-        if Tag.objects.filter(user=self.user, name=name).exists():
-            return JsonResponse({'error': 'Tag with this name already exists'}, status=409)
-
-        tag = Tag.objects.create(user=self.user, name=name)
-        return JsonResponse(_tag_json(tag), status=201)
-
-
-class TagsDetailView(AuthMixin, View):
-    def _get_tag(self, id):
-        try:
-            return Tag.objects.get(id=id, user=self.user), None
-        except Tag.DoesNotExist:
-            return None, JsonResponse({'error': 'Tag not found'}, status=404)
-
-    def get(self, request, id):
-        tag, err = self._get_tag(id)
-        if err:
-            return err
-        return JsonResponse(_tag_json(tag))
-
-    def put(self, request, id):
-        tag, err = self._get_tag(id)
-        if err:
-            return err
-
-        try:
-            data = json.loads(request.body)
-        except (json.JSONDecodeError, ValueError):
-            return JsonResponse({'error': 'Invalid JSON'}, status=400)
-
-        if 'name' in data:
-            name = data['name'].strip()
-            if not name:
-                return JsonResponse({'error': 'name cannot be empty'}, status=400)
-            if Tag.objects.filter(user=self.user, name=name).exclude(id=id).exists():
-                return JsonResponse({'error': 'Tag with this name already exists'}, status=409)
-            tag.name = name
-
-        tag.save()
-        return JsonResponse(_tag_json(tag))
-
-
-    def delete(self, request, id):
-        tag, err = self._get_tag(id)
-        if err:
-            return err
-        tag.delete()
-        return JsonResponse({'message': 'Tag deleted'})
-
-
-
-
-
 def _parse_date(value, field_name):
     if not value:
         return None, None
@@ -366,27 +287,17 @@ def _goal_json(goal):
         'is_active': goal.is_active,
         'category_id': goal.category_id,
         'parent_goal_id': goal.parent_goal_id,
-        'tags': [{'id': t.id, 'name': t.name} for t in goal.tags.all()],
         'created_at': goal.created_at.isoformat(),
         'updated_at': goal.updated_at.isoformat(),
     }
 
 
-def _resolve_tags(tag_ids, user):
-    if not isinstance(tag_ids, list):
-        return None, JsonResponse({'error': 'tag_ids must be a list'}, status=400)
-    if not tag_ids:
-        return [], None
-    tags = list(Tag.objects.filter(id__in=tag_ids, user=user))
-    if len(tags) != len(set(tag_ids)):
-        return None, JsonResponse({'error': 'One or more tag IDs not found'}, status=404)
-    return tags, None
 
 
 
 class GoalsListView(AuthMixin, View):
     def get(self, request):
-        qs = Goal.objects.filter(user=self.user).prefetch_related('tags').order_by('-created_at')
+        qs = Goal.objects.filter(user=self.user).order_by('-created_at')
 
         goal_type = request.GET.get('goal_type')
         category_id = request.GET.get('category_id')
@@ -453,10 +364,6 @@ class GoalsListView(AuthMixin, View):
             return err
 
 
-        tags, err = _resolve_tags(data.get('tag_ids', []), self.user)
-        if err:
-            return err
-
         goal = Goal.objects.create(
             user=self.user,
             title=title,
@@ -474,8 +381,6 @@ class GoalsListView(AuthMixin, View):
             category=category,
             parent_goal=parent_goal,
         )
-        if tags:
-            goal.tags.set(tags)
 
         return JsonResponse(_goal_json(goal), status=201)
 
@@ -484,7 +389,7 @@ class GoalsListView(AuthMixin, View):
 class GoalsDetailView(AuthMixin, View):
     def _get_goal(self, id):
         try:
-            return Goal.objects.prefetch_related('tags').get(id=id, user=self.user), None
+            return Goal.objects.get(id=id, user=self.user), None
         except Goal.DoesNotExist:
             return None, JsonResponse({'error': 'Goal not found'}, status=404)
 
@@ -551,13 +456,6 @@ class GoalsDetailView(AuthMixin, View):
 
         goal.save()
 
-        if 'tag_ids' in data:
-            tags, err = _resolve_tags(data['tag_ids'], self.user)
-            if err:
-                return err
-            goal.tags.set(tags)
-
-        goal.refresh_from_db()
         return JsonResponse(_goal_json(goal))
 
 
@@ -571,325 +469,7 @@ class GoalsDetailView(AuthMixin, View):
 
 
 
-
-_VALID_FREQUENCIES = {'none', 'daily', 'weekdays', 'weekly', 'monthly', 'custom'}
-_VALID_DAYS = {'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT', 'SUN'}
-
-
-def _validate_days_of_week(days):
-    if not isinstance(days, list):
-        return 'days_of_week must be a list'
-    invalid = [d for d in days if not isinstance(d, str) or d not in _VALID_DAYS]
-    if invalid:
-        return f'Invalid days_of_week values: {invalid}. Allowed: {sorted(_VALID_DAYS)}'
-    return None
-
-
-def _safe_date(val):
-    if val is None:
-        return None
-    return val if isinstance(val, str) else val.isoformat()
-
-
-def _recurrence_rule_json(rule):
-    return {
-        'id': rule.id,
-        'frequency': rule.frequency,
-        'interval': rule.interval,
-        'days_of_week': rule.days_of_week,
-        'day_of_month': rule.day_of_month,
-        'start_date': _safe_date(rule.start_date),
-        'end_date': _safe_date(rule.end_date),
-        'is_active': rule.is_active,
-        'created_at': rule.created_at.isoformat(),
-        'updated_at': rule.updated_at.isoformat(),
-    }
-
-
-class RecurrenceRulesListView(AuthMixin, View):
-    def get(self, request):
-        qs = RecurrenceRule.objects.filter(user=self.user).order_by('-created_at')
-        return JsonResponse({'recurrence_rules': [_recurrence_rule_json(r) for r in qs]})
-
-    def post(self, request):
-        try:
-            data = json.loads(request.body)
-        except (json.JSONDecodeError, ValueError):
-            return JsonResponse({'error': 'Invalid JSON'}, status=400)
-
-        frequency = data.get('frequency', 'none')
-        if frequency not in _VALID_FREQUENCIES:
-            return JsonResponse({'error': f'Invalid frequency. Allowed: {sorted(_VALID_FREQUENCIES)}'}, status=400)
-
-        interval = data.get('interval', 1)
-        try:
-            interval = int(interval)
-            if interval < 1:
-                raise ValueError
-        except (TypeError, ValueError):
-            return JsonResponse({'error': 'interval must be a positive integer'}, status=400)
-
-        days_of_week = data.get('days_of_week')
-        if days_of_week is not None:
-            err_msg = _validate_days_of_week(days_of_week)
-            if err_msg:
-                return JsonResponse({'error': err_msg}, status=400)
-
-        rule = RecurrenceRule.objects.create(
-            user=self.user,
-            frequency=frequency,
-            interval=interval,
-            days_of_week=days_of_week,
-            day_of_month=data.get('day_of_month') or None,
-            start_date=data.get('start_date') or None,
-            end_date=data.get('end_date') or None,
-            is_active=data.get('is_active', True),
-        )
-        return JsonResponse(_recurrence_rule_json(rule), status=201)
-
-
-
-
-class RecurrenceRulesDetailView(AuthMixin, View):
-    def _get_rule(self, id):
-        try:
-            return RecurrenceRule.objects.get(id=id, user=self.user), None
-        except RecurrenceRule.DoesNotExist:
-            return None, JsonResponse({'error': 'RecurrenceRule not found'}, status=404)
-
-    def get(self, request, id):
-        rule, err = self._get_rule(id)
-        if err:
-            return err
-        return JsonResponse(_recurrence_rule_json(rule))
-
-
-    def put(self, request, id):
-        rule, err = self._get_rule(id)
-        if err:
-            return err
-
-        try:
-            data = json.loads(request.body)
-        except (json.JSONDecodeError, ValueError):
-            return JsonResponse({'error': 'Invalid JSON'}, status=400)
-
-        if 'frequency' in data:
-            if data['frequency'] not in _VALID_FREQUENCIES:
-                return JsonResponse({'error': f'Invalid frequency. Allowed: {sorted(_VALID_FREQUENCIES)}'}, status=400)
-            rule.frequency = data['frequency']
-
-        if 'interval' in data:
-            try:
-                interval = int(data['interval'])
-                if interval < 1:
-                    raise ValueError
-            except (TypeError, ValueError):
-                return JsonResponse({'error': 'interval must be a positive integer'}, status=400)
-            rule.interval = interval
-
-        if 'days_of_week' in data:
-            if data['days_of_week'] is None:
-                rule.days_of_week = None
-            else:
-                err_msg = _validate_days_of_week(data['days_of_week'])
-                if err_msg:
-                    return JsonResponse({'error': err_msg}, status=400)
-                rule.days_of_week = data['days_of_week']
-
-        for field in ('day_of_month', 'start_date', 'end_date', 'is_active'):
-            if field in data:
-                setattr(rule, field, data[field] if data[field] != '' else None)
-
-        rule.save()
-        return JsonResponse(_recurrence_rule_json(rule))
-
-
-    def delete(self, request, id):
-        rule, err = self._get_rule(id)
-        if err:
-            return err
-        rule.delete()
-        return JsonResponse({'message': 'RecurrenceRule deleted'})
-
-
-
-
-
 _VALID_ACTIVITY_TYPES = {'task', 'session', 'habit', 'event', 'deep_work'}
-
-
-def _activity_template_json(template):
-    return {
-        'id': template.id,
-        'title': template.title,
-        'description': template.description,
-        'activity_type': template.activity_type,
-        'estimated_minutes': template.estimated_minutes,
-        'is_active': template.is_active,
-        'category_id': template.category_id,
-        'recurrence_rule_id': template.recurrence_rule_id,
-        'recurrence_rule': _recurrence_rule_json(template.recurrence_rule) if template.recurrence_rule else None,
-        'created_at': template.created_at.isoformat(),
-        'updated_at': template.updated_at.isoformat(),
-    }
-
-
-def _resolve_template_fks(data, user, current_category=None, current_rule=None):
-    category = current_category
-    rule = current_rule
-
-    if 'category_id' in data:
-        if data['category_id'] is None:
-            category = None
-        else:
-            try:
-                category = Category.objects.get(id=data['category_id'], user=user)
-            except Category.DoesNotExist:
-                return None, None, JsonResponse({'error': 'Category not found'}, status=404)
-
-    if 'recurrence_rule_id' in data:
-        if data['recurrence_rule_id'] is None:
-            rule = None
-        else:
-            try:
-                rule = RecurrenceRule.objects.get(id=data['recurrence_rule_id'], user=user)
-            except RecurrenceRule.DoesNotExist:
-                return None, None, JsonResponse({'error': 'RecurrenceRule not found'}, status=404)
-
-    return category, rule, None
-
-
-class ActivityTemplatesListView(AuthMixin, View):
-    def get(self, request):
-        qs = (ActivityTemplate.objects
-              .filter(user=self.user)
-              .select_related('recurrence_rule')
-              .order_by('-created_at'))
-        return JsonResponse({'activity_templates': [_activity_template_json(t) for t in qs]})
-
-
-    def post(self, request):
-        try:
-            data = json.loads(request.body)
-        except (json.JSONDecodeError, ValueError):
-            return JsonResponse({'error': 'Invalid JSON'}, status=400)
-
-        title = data.get('title', '').strip()
-        if not title:
-            return JsonResponse({'error': 'title is required'}, status=400)
-
-        activity_type = data.get('activity_type', 'task')
-        if activity_type not in _VALID_ACTIVITY_TYPES:
-            return JsonResponse({'error': f'Invalid activity_type. Allowed: {sorted(_VALID_ACTIVITY_TYPES)}'}, status=400)
-
-        estimated_minutes = data.get('estimated_minutes')
-        if estimated_minutes is not None:
-            try:
-                estimated_minutes = int(estimated_minutes)
-                if estimated_minutes < 1:
-                    raise ValueError
-            except (TypeError, ValueError):
-                return JsonResponse({'error': 'estimated_minutes must be a positive integer'}, status=400)
-
-        category, rule, err = _resolve_template_fks(data, self.user)
-        if err:
-            return err
-
-        template = ActivityTemplate.objects.create(
-            user=self.user,
-            title=title,
-            description=data.get('description') or None,
-            activity_type=activity_type,
-            estimated_minutes=estimated_minutes,
-            is_active=data.get('is_active', True),
-            category=category,
-            recurrence_rule=rule,
-        )
-        template = ActivityTemplate.objects.select_related('recurrence_rule').get(id=template.id)
-        return JsonResponse(_activity_template_json(template), status=201)
-
-
-
-class ActivityTemplatesDetailView(AuthMixin, View):
-    def _get_template(self, id):
-        try:
-            return (ActivityTemplate.objects
-                    .select_related('recurrence_rule')
-                    .get(id=id, user=self.user)), None
-        except ActivityTemplate.DoesNotExist:
-            return None, JsonResponse({'error': 'ActivityTemplate not found'}, status=404)
-
-    def get(self, request, id):
-        template, err = self._get_template(id)
-        if err:
-            return err
-        return JsonResponse(_activity_template_json(template))
-
-
-    def put(self, request, id):
-        template, err = self._get_template(id)
-        if err:
-            return err
-
-        try:
-            data = json.loads(request.body)
-        except (json.JSONDecodeError, ValueError):
-            return JsonResponse({'error': 'Invalid JSON'}, status=400)
-
-        if 'title' in data:
-            title = data['title'].strip()
-            if not title:
-                return JsonResponse({'error': 'title cannot be empty'}, status=400)
-            template.title = title
-
-        if 'activity_type' in data:
-            if data['activity_type'] not in _VALID_ACTIVITY_TYPES:
-                return JsonResponse({'error': f'Invalid activity_type. Allowed: {sorted(_VALID_ACTIVITY_TYPES)}'}, status=400)
-            template.activity_type = data['activity_type']
-
-        if 'estimated_minutes' in data:
-            if data['estimated_minutes'] is None:
-                template.estimated_minutes = None
-            else:
-                try:
-                    em = int(data['estimated_minutes'])
-                    if em < 1:
-                        raise ValueError
-                except (TypeError, ValueError):
-                    return JsonResponse({'error': 'estimated_minutes must be a positive integer'}, status=400)
-                template.estimated_minutes = em
-
-        category, rule, err = _resolve_template_fks(
-            data, self.user,
-            current_category=template.category,
-            current_rule=template.recurrence_rule,
-        )
-        if err:
-            return err
-        template.category = category
-        template.recurrence_rule = rule
-
-        if 'description' in data:
-            template.description = data['description'] or None
-        if 'is_active' in data:
-            template.is_active = bool(data['is_active'])
-
-        template.save()
-        template.refresh_from_db()
-        return JsonResponse(_activity_template_json(template))
-
-
-    def delete(self, request, id):
-        template, err = self._get_template(id)
-        if err:
-            return err
-        template.delete()
-        return JsonResponse({'message': 'ActivityTemplate deleted'})
-
-
-
-
 
 def _main_goal_summary(goal):
     if not goal:
@@ -1154,8 +734,6 @@ class DayEntriesDraftCloseView(AuthMixin, View):
 
 
 _VALID_STATUSES = {'pending', 'in_progress', 'completed', 'partial', 'failed'}
-_DAY_ABBR = ['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT', 'SUN']
-
 
 def _safe_time(val):
     if val is None:
@@ -1178,81 +756,9 @@ def _activity_json(activity):
         'day_entry_id': activity.day_entry_id,
         'goal_id': activity.goal_id,
         'category_id': activity.category_id,
-        'template_id': activity.template_id,
         'created_at': activity.created_at.isoformat(),
         'updated_at': activity.updated_at.isoformat(),
     }
-
-
-def _rule_matches_date(rule, date):
-    freq = rule.frequency
-    if freq == 'none':
-        return False
-    if freq == 'daily':
-        return True
-    if freq == 'weekdays':
-        return date.weekday() < 5
-
-    day_abbr = _DAY_ABBR[date.weekday()]
-
-    if freq == 'weekly':
-        return day_abbr in rule.days_of_week if rule.days_of_week else True
-    if freq == 'monthly':
-        return date.day == rule.day_of_month if rule.day_of_month else True
-    if freq == 'custom':
-        return bool(rule.days_of_week) and day_abbr in rule.days_of_week
-    return False
-
-
-def _generate_recurring_for_day(entry):
-    user = entry.user
-    date = entry.date
-    if isinstance(date, str):
-        date = dt.date.fromisoformat(date)
-
-    templates = (ActivityTemplate.objects
-                 .filter(user=user, is_active=True, recurrence_rule__isnull=False)
-                 .select_related('recurrence_rule', 'category'))
-
-    existing_template_ids = set(
-        Activity.objects.filter(user=user, day_entry=entry, template__isnull=False)
-        .values_list('template_id', flat=True)
-    )
-
-    created_ids = []
-    for template in templates:
-        rule = template.recurrence_rule
-        if not rule.is_active:
-            continue
-        if template.id in existing_template_ids:
-            continue
-
-        if rule.start_date:
-            start = rule.start_date if isinstance(rule.start_date, dt.date) else dt.date.fromisoformat(rule.start_date)
-            if date < start:
-                continue
-        if rule.end_date:
-            end = rule.end_date if isinstance(rule.end_date, dt.date) else dt.date.fromisoformat(rule.end_date)
-            if date > end:
-                continue
-
-        if not _rule_matches_date(rule, date):
-            continue
-
-        activity = Activity.objects.create(
-            user=user,
-            day_entry=entry,
-            template=template,
-            title=template.title,
-            description=template.description,
-            activity_type=template.activity_type,
-            estimated_minutes=template.estimated_minutes,
-            category=template.category,
-            status='pending',
-        )
-        created_ids.append(activity.id)
-
-    return created_ids
 
 
 def _validate_positive_int(value, field_name):
@@ -1294,15 +800,6 @@ def _resolve_activity_fks(data, user):
                 fks['category'] = Category.objects.get(id=data['category_id'], user=user)
             except Category.DoesNotExist:
                 return None, JsonResponse({'error': 'Category not found'}, status=404)
-
-    if 'template_id' in data:
-        if data['template_id'] is None:
-            fks['template'] = None
-        else:
-            try:
-                fks['template'] = ActivityTemplate.objects.get(id=data['template_id'], user=user)
-            except ActivityTemplate.DoesNotExist:
-                return None, JsonResponse({'error': 'ActivityTemplate not found'}, status=404)
 
     return fks, None
 
@@ -1368,7 +865,6 @@ class ActivitiesListView(AuthMixin, View):
             day_entry=fks.get('day_entry'),
             goal=fks.get('goal'),
             category=fks.get('category'),
-            template=fks.get('template'),
             title=title,
             description=data.get('description') or None,
             activity_type=activity_type,
@@ -1480,7 +976,6 @@ class DayEntryActivitiesView(AuthMixin, View):
         entry, err = self._get_entry(id)
         if err:
             return err
-        _generate_recurring_for_day(entry)
         qs = (Activity.objects
               .filter(user=self.user, day_entry=entry)
               .order_by('order', 'created_at'))
@@ -1528,16 +1023,11 @@ class DayEntryActivitiesView(AuthMixin, View):
         if err:
             return err
 
-        template = fks.get('template')
-        if template and Activity.objects.filter(user=self.user, day_entry=entry, template=template).exists():
-            return JsonResponse({'error': 'Activity from this template already exists for this day'}, status=409)
-
         activity = Activity.objects.create(
             user=self.user,
             day_entry=entry,
             goal=fks.get('goal'),
             category=fks.get('category'),
-            template=template,
             title=title,
             description=data.get('description') or None,
             activity_type=activity_type,
@@ -1554,128 +1044,9 @@ class DayEntryActivitiesView(AuthMixin, View):
 
 
 
-class DayEntryGenerateRecurringView(AuthMixin, View):
-    def post(self, request, id):
-        try:
-            entry = DayEntry.objects.get(id=id, user=self.user)
-        except DayEntry.DoesNotExist:
-            return JsonResponse({'error': 'DayEntry not found'}, status=404)
-
-        created_ids = _generate_recurring_for_day(entry)
-        activities = Activity.objects.filter(id__in=created_ids).order_by('order', 'created_at')
-        return JsonResponse({
-            'generated': len(created_ids),
-            'activities': [_activity_json(a) for a in activities],
-        })
-
-
-
-
-
-
-def _note_json(note):
-    return {
-        'id': note.id,
-        'text': note.text,
-        'order': note.order,
-        'day_entry_id': note.day_entry_id,
-        'created_at': note.created_at.isoformat(),
-        'updated_at': note.updated_at.isoformat(),
-    }
-
-
-class DayEntryNotesView(AuthMixin, View):
-    def _get_entry(self, id):
-        try:
-            return DayEntry.objects.get(id=id, user=self.user), None
-        except DayEntry.DoesNotExist:
-            return None, JsonResponse({'error': 'DayEntry not found'}, status=404)
-
-    def get(self, request, id):
-        entry, err = self._get_entry(id)
-        if err:
-            return err
-        notes = DayNote.objects.filter(user=self.user, day_entry=entry).order_by('order', 'created_at')
-        return JsonResponse({'notes': [_note_json(n) for n in notes]})
-
-
-    def post(self, request, id):
-        entry, err = self._get_entry(id)
-        if err:
-            return err
-
-        try:
-            data = json.loads(request.body)
-        except (json.JSONDecodeError, ValueError):
-            return JsonResponse({'error': 'Invalid JSON'}, status=400)
-
-        text = data.get('text', '').strip()
-        if not text:
-            return JsonResponse({'error': 'text is required'}, status=400)
-
-        note = DayNote.objects.create(
-            user=self.user,
-            day_entry=entry,
-            text=text,
-            order=data.get('order', 0),
-        )
-        note.refresh_from_db()
-        return JsonResponse(_note_json(note), status=201)
-
-
-
-
-class NotesDetailView(AuthMixin, View):
-    def _get_note(self, id):
-        try:
-            return DayNote.objects.get(id=id, user=self.user), None
-        except DayNote.DoesNotExist:
-            return None, JsonResponse({'error': 'Note not found'}, status=404)
-
-    def get(self, request, id):
-        note, err = self._get_note(id)
-        if err:
-            return err
-        return JsonResponse(_note_json(note))
-
-    def put(self, request, id):
-        note, err = self._get_note(id)
-        if err:
-            return err
-
-        try:
-            data = json.loads(request.body)
-        except (json.JSONDecodeError, ValueError):
-            return JsonResponse({'error': 'Invalid JSON'}, status=400)
-
-        if 'text' in data:
-            text = data['text'].strip()
-            if not text:
-                return JsonResponse({'error': 'text cannot be empty'}, status=400)
-            note.text = text
-
-        if 'order' in data:
-            note.order = data['order']
-
-        note.save()
-        note.refresh_from_db()
-        return JsonResponse(_note_json(note))
-
-    def delete(self, request, id):
-        note, err = self._get_note(id)
-        if err:
-            return err
-        note.delete()
-        return JsonResponse({'message': 'Note deleted'})
-
-
-
-
-
 def _day_entry_detail_json(entry, activities=None):
     data = _day_entry_json(entry)
     data['activities'] = [_activity_json(a) for a in (activities or [])]
-    data['notes'] = [_note_json(n) for n in DayNote.objects.filter(day_entry=entry).order_by('order', 'created_at')]
     return data
 
 
@@ -1686,10 +1057,9 @@ class DayEntriesDetailView(AuthMixin, View):
         except DayEntry.DoesNotExist:
             return JsonResponse({'error': 'DayEntry not found'}, status=404)
 
-        _generate_recurring_for_day(entry)
         activities = (Activity.objects
                       .filter(user=self.user, day_entry=entry)
-                      .select_related('category', 'template')
+                      .select_related('category')
                       .order_by('order', 'created_at'))
         return JsonResponse(_day_entry_detail_json(entry, activities))
 
@@ -1924,7 +1294,6 @@ class DashboardTodayView(AuthMixin, View):
 
         entry, _ = DayEntry.objects.get_or_create(user=self.user, date=today)
         entry = DayEntry.objects.select_related('main_goal').get(id=entry.id)
-        _generate_recurring_for_day(entry)
 
         activities = (Activity.objects
                       .filter(user=self.user, day_entry=entry)
