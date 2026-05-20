@@ -46,18 +46,6 @@ class Category(models.Model):
         return self.name
 
 
-class Tag(models.Model):
-    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='tags')
-    name = models.CharField(max_length=50)
-    created_at = models.DateTimeField(auto_now_add=True)
-    updated_at = models.DateTimeField(auto_now=True)
-
-    class Meta:
-        unique_together = ('user', 'name')
-
-    def __str__(self):
-        return self.name
-
 
 class Goal(models.Model):
     GOAL_TYPE_CHOICES = [
@@ -103,7 +91,6 @@ class Goal(models.Model):
     target_value = models.FloatField(null=True, blank=True)
     current_value = models.FloatField(null=True, blank=True)
     is_active = models.BooleanField(default=True)
-    tags = models.ManyToManyField(Tag, blank=True, related_name='goals')
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -148,61 +135,6 @@ class DayEntry(models.Model):
 
 
 
-class RecurrenceRule(models.Model):
-    FREQUENCY_CHOICES = [
-        ('none', 'None'),
-        ('daily', 'Daily'),
-        ('weekdays', 'Weekdays'),
-        ('weekly', 'Weekly'),
-        ('monthly', 'Monthly'),
-        ('custom', 'Custom'),
-    ]
-
-    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='recurrence_rules')
-    frequency = models.CharField(max_length=20, choices=FREQUENCY_CHOICES, default='none')
-    interval = models.IntegerField(default=1)
-    # e.g. ["MON", "TUE", "WED", "THU", "FRI"]
-    days_of_week = models.JSONField(null=True, blank=True)
-    day_of_month = models.IntegerField(null=True, blank=True)
-    start_date = models.DateField(null=True, blank=True)
-    end_date = models.DateField(null=True, blank=True)
-    is_active = models.BooleanField(default=True)
-    created_at = models.DateTimeField(auto_now_add=True)
-    updated_at = models.DateTimeField(auto_now=True)
-
-    def __str__(self):
-        return f'{self.user.username} — {self.frequency} x{self.interval}'
-
-
-class ActivityTemplate(models.Model):
-    ACTIVITY_TYPE_CHOICES = [
-        ('task', 'Task'),
-        ('session', 'Session'),
-        ('habit', 'Habit'),
-        ('event', 'Event'),
-        ('deep_work', 'Deep Work'),
-    ]
-
-    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='activity_templates')
-    title = models.CharField(max_length=255)
-    description = models.TextField(blank=True, null=True)
-    category = models.ForeignKey(
-        Category, on_delete=models.SET_NULL, null=True, blank=True, related_name='activity_templates'
-    )
-    estimated_minutes = models.IntegerField(null=True, blank=True)
-    activity_type = models.CharField(max_length=20, choices=ACTIVITY_TYPE_CHOICES, default='task')
-    recurrence_rule = models.ForeignKey(
-        RecurrenceRule, on_delete=models.SET_NULL, null=True, blank=True, related_name='activity_templates'
-    )
-    is_active = models.BooleanField(default=True)
-    created_at = models.DateTimeField(auto_now_add=True)
-    updated_at = models.DateTimeField(auto_now=True)
-
-    def __str__(self):
-        return self.title
-
-
-
 class Activity(models.Model):
     ACTIVITY_TYPE_CHOICES = [
         ('task', 'Task'),
@@ -229,9 +161,6 @@ class Activity(models.Model):
     category = models.ForeignKey(
         Category, on_delete=models.SET_NULL, null=True, blank=True, related_name='activities'
     )
-    template = models.ForeignKey(
-        ActivityTemplate, on_delete=models.SET_NULL, null=True, blank=True, related_name='activities'
-    )
     title = models.CharField(max_length=255)
     description = models.TextField(blank=True, null=True)
     start_time = models.TimeField(null=True, blank=True)
@@ -246,15 +175,3 @@ class Activity(models.Model):
 
     def __str__(self):
         return self.title
-
-
-class DayNote(models.Model):
-    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='day_notes')
-    day_entry = models.ForeignKey(DayEntry, on_delete=models.CASCADE, related_name='notes')
-    text = models.TextField()
-    order = models.IntegerField(default=0)
-    created_at = models.DateTimeField(auto_now_add=True)
-    updated_at = models.DateTimeField(auto_now=True)
-
-    def __str__(self):
-        return f'{self.user.username} — {self.day_entry.date} — note {self.order}'
