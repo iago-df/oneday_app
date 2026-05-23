@@ -38,6 +38,7 @@ dependencies {
     implementation(libs.retrofit)
     implementation(libs.retrofit.converter.gson)
     implementation(libs.okhttp.logging)
+    implementation(libs.viewpager2)
     implementation(libs.appcompat)
     implementation(libs.material)
     implementation(libs.activity)
