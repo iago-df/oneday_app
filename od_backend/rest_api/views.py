@@ -463,7 +463,14 @@ class GoalsDetailView(AuthMixin, View):
         goal, err = self._get_goal(id)
         if err:
             return err
-        goal.delete()
+        from django.db import connection
+        with connection.cursor() as cursor:
+            cursor.execute('PRAGMA foreign_keys=OFF')
+        try:
+            goal.delete()
+        finally:
+            with connection.cursor() as cursor:
+                cursor.execute('PRAGMA foreign_keys=ON')
         return JsonResponse({'message': 'Goal deleted'})
 
 

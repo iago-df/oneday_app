@@ -36,38 +36,53 @@ public class MainActivity extends AppCompatActivity {
 
         ViewCompat.setOnApplyWindowInsetsListener(binding.bottomNav, (v, insets) -> {
             int bottom = insets.getInsets(WindowInsetsCompat.Type.systemBars()).bottom;
-            v.setPadding(0, 0, 0, bottom);
+            int shift = (int)(3 * getResources().getDisplayMetrics().density);
+            int height = (int)(66 * getResources().getDisplayMetrics().density);
+            v.getLayoutParams().height = height + bottom / 2 + shift;
+            v.requestLayout();
+            int extra = (int)(18     * getResources().getDisplayMetrics().density);
+            v.setPadding(0, 0, 0, bottom / 2 + shift + extra);
             return insets;
         });
 
+        final Fragment[] fragments = {
+                new TodayFragment(),
+                new CalendarFragment(),
+                new GoalsFragment(),
+                new StatsFragment()
+        };
+        final int[] navIds = {
+                R.id.nav_today,
+                R.id.nav_calendar,
+                R.id.nav_goals,
+                R.id.nav_stats
+        };
+
         if (savedInstanceState == null) {
-            loadFragment(new TodayFragment());
+            androidx.fragment.app.FragmentTransaction ft = getSupportFragmentManager().beginTransaction();
+            for (int i = 0; i < fragments.length; i++) {
+                ft.add(R.id.fragmentContainer, fragments[i]);
+                if (i != 0) ft.hide(fragments[i]);
+            }
+            ft.commit();
             binding.bottomNav.setSelectedItemId(R.id.nav_today);
         }
 
+        final Fragment[] active = {fragments[0]};
+
         binding.bottomNav.setOnItemSelectedListener(item -> {
-            Fragment fragment;
             int id = item.getItemId();
-            if (id == R.id.nav_today) {
-                fragment = new TodayFragment();
-            } else if (id == R.id.nav_calendar) {
-                fragment = new CalendarFragment();
-            } else if (id == R.id.nav_goals) {
-                fragment = new GoalsFragment();
-            } else if (id == R.id.nav_stats) {
-                fragment = new StatsFragment();
-            } else {
-                return false;
+            Fragment next = null;
+            for (int i = 0; i < navIds.length; i++) {
+                if (navIds[i] == id) { next = fragments[i]; break; }
             }
-            loadFragment(fragment);
+            if (next == null || next == active[0]) return true;
+            getSupportFragmentManager().beginTransaction()
+                    .hide(active[0])
+                    .show(next)
+                    .commit();
+            active[0] = next;
             return true;
         });
-    }
-
-    private void loadFragment(Fragment fragment) {
-        getSupportFragmentManager()
-                .beginTransaction()
-                .replace(R.id.fragmentContainer, fragment)
-                .commit();
     }
 }
