@@ -7,6 +7,9 @@ import com.example.oneday.api.models.GoalData;
 import com.example.oneday.api.models.GoalsResponse;
 import com.example.oneday.api.models.LoginRequest;
 import com.example.oneday.api.models.RegisterRequest;
+import com.example.oneday.api.models.StatsStreakResponse;
+import com.example.oneday.api.models.StatsSummaryResponse;
+import com.example.oneday.api.models.StatsWeeklyResponse;
 
 import java.util.Map;
 
@@ -63,4 +66,13 @@ public interface ApiService {
             @Path("id") int id,
             @Header("Authorization") String token
     );
+
+    @GET("stats/weekly/")
+    Call<StatsWeeklyResponse> getStatsWeekly(@Header("Authorization") String token);
+
+    @GET("stats/streak/")
+    Call<StatsStreakResponse> getStatsStreak(@Header("Authorization") String token);
+
+    @GET("stats/summary/")
+    Call<StatsSummaryResponse> getStatsSummary(@Header("Authorization") String token);
 }
