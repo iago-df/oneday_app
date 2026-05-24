@@ -3,6 +3,8 @@ package com.example.oneday.api;
 import com.example.oneday.api.models.ActivityData;
 import com.example.oneday.api.models.AuthResponse;
 import com.example.oneday.api.models.DashboardResponse;
+import com.example.oneday.api.models.GoalData;
+import com.example.oneday.api.models.GoalsResponse;
 import com.example.oneday.api.models.LoginRequest;
 import com.example.oneday.api.models.RegisterRequest;
 
@@ -45,5 +47,20 @@ public interface ApiService {
             @Path("id") int id,
             @Header("Authorization") String token,
             @Body Map<String, Object> body
+    );
+
+    @GET("goals/")
+    Call<GoalsResponse> getGoals(@Header("Authorization") String token);
+
+    @POST("goals/")
+    Call<GoalData> createGoal(
+            @Header("Authorization") String token,
+            @Body Map<String, Object> body
+    );
+
+    @DELETE("goals/{id}/")
+    Call<Void> deleteGoal(
+            @Path("id") int id,
+            @Header("Authorization") String token
     );
 }
