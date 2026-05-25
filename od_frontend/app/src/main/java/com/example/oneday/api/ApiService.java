@@ -2,6 +2,7 @@ package com.example.oneday.api;
 
 import com.example.oneday.api.models.ActivityData;
 import com.example.oneday.api.models.AuthResponse;
+import com.example.oneday.api.models.CalendarResponse;
 import com.example.oneday.api.models.DashboardResponse;
 import com.example.oneday.api.models.GoalData;
 import com.example.oneday.api.models.GoalsResponse;
@@ -21,6 +22,7 @@ import retrofit2.http.Header;
 import retrofit2.http.POST;
 import retrofit2.http.PUT;
 import retrofit2.http.Path;
+import retrofit2.http.Query;
 
 public interface ApiService {
     @POST("auth/login/")
@@ -75,4 +77,11 @@ public interface ApiService {
 
     @GET("stats/summary/")
     Call<StatsSummaryResponse> getStatsSummary(@Header("Authorization") String token);
+
+    @GET("calendar/")
+    Call<CalendarResponse> getCalendar(
+            @Header("Authorization") String token,
+            @Query("year") int year,
+            @Query("month") int month
+    );
 }
