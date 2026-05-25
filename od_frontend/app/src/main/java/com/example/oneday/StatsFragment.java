@@ -7,8 +7,10 @@ import android.graphics.Paint;
 import android.graphics.RectF;
 import android.graphics.Typeface;
 import android.os.Bundle;
+import android.view.GestureDetector;
 import android.view.Gravity;
 import android.view.LayoutInflater;
+import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.LinearLayout;
@@ -26,6 +28,7 @@ import com.example.oneday.session.SessionManager;
 import com.google.android.material.card.MaterialCardView;
 
 import java.text.SimpleDateFormat;
+import java.util.Calendar;
 import java.util.Date;
 import java.util.List;
 import java.util.Locale;
@@ -38,12 +41,16 @@ import retrofit2.Response;
 public class StatsFragment extends Fragment {
 
     private LinearLayout scrollContainer;
+    private LinearLayout weeklyCardInner;
+    private TextView tvWeekNext;
     private SessionManager session;
 
     private StatsWeeklyResponse weeklyData;
     private StatsStreakResponse streakData;
     private StatsSummaryResponse summaryData;
     private int loadedCount = 0;
+    private Calendar currentWeekStart;
+
 
     @Nullable
     @Override
@@ -62,55 +69,122 @@ public class StatsFragment extends Fragment {
         TextView tvDate = view.findViewById(R.id.tvDate);
         tvDate.setText(new SimpleDateFormat("EEE, MMM d", Locale.ENGLISH).format(new Date()));
 
+        currentWeekStart = getThisMonday();
         loadAll();
     }
 
+    private Calendar getThisMonday() {
+        Calendar cal = Calendar.getInstance();
+        int dow = cal.get(Calendar.DAY_OF_WEEK);
+        cal.add(Calendar.DAY_OF_MONTH, -((dow + 5) % 7));
+        cal.set(Calendar.HOUR_OF_DAY, 0);
+        cal.set(Calendar.MINUTE, 0);
+        cal.set(Calendar.SECOND, 0);
+        cal.set(Calendar.MILLISECOND, 0);
+        return cal;
+    }
+
+    private String calToString(Calendar cal) {
+        return String.format(Locale.ENGLISH, "%04d-%02d-%02d",
+                cal.get(Calendar.YEAR), cal.get(Calendar.MONTH) + 1, cal.get(Calendar.DAY_OF_MONTH));
+    }
+
+    private String formatWeekRange(Calendar monday) {
+        Calendar sunday = (Calendar) monday.clone();
+        sunday.add(Calendar.DAY_OF_MONTH, 6);
+        SimpleDateFormat dayFmt      = new SimpleDateFormat("d", Locale.ENGLISH);
+        SimpleDateFormat monthDayFmt = new SimpleDateFormat("MMM d", Locale.ENGLISH);
+        if (monday.get(Calendar.MONTH) == sunday.get(Calendar.MONTH)) {
+            return new SimpleDateFormat("MMM", Locale.ENGLISH).format(monday.getTime())
+                    + " " + dayFmt.format(monday.getTime())
+                    + " – " + dayFmt.format(sunday.getTime());
+        } else {
+            return monthDayFmt.format(monday.getTime()) + " – " + monthDayFmt.format(sunday.getTime());
+        }
+    }
+
+    private boolean isCurrentWeek() {
+        return calToString(currentWeekStart).equals(calToString(getThisMonday()));
+    }
+
+
     private void loadAll() {
         loadedCount = 0;
-        weeklyData  = null;
-        streakData  = null;
-        summaryData = null;
-
         String token = "Bearer " + session.getToken();
+        String[] range = weekRange();
 
-        ApiClient.get().getStatsWeekly(token).enqueue(new Callback<StatsWeeklyResponse>() {
-            @Override public void onResponse(@NonNull Call<StatsWeeklyResponse> call,
-                                             @NonNull Response<StatsWeeklyResponse> r) {
-                if (!isAdded()) return;
-                weeklyData = r.body();
-                onDataReady();
-            }
-            @Override public void onFailure(@NonNull Call<StatsWeeklyResponse> call, @NonNull Throwable t) {
-                if (!isAdded()) return;
-                onDataReady();
-            }
-        });
+        ApiClient.get().getStatsWeekly(token, range[0], range[1])
+                .enqueue(new Callback<StatsWeeklyResponse>() {
+                    @Override public void onResponse(@NonNull Call<StatsWeeklyResponse> c,
+                                                     @NonNull Response<StatsWeeklyResponse> r) {
+                        if (!isAdded()) return;
+                        weeklyData = r.body();
+                        onDataReady();
+                    }
+                    @Override public void onFailure(@NonNull Call<StatsWeeklyResponse> c, @NonNull Throwable t) {
+                        if (!isAdded()) return;
+                        onDataReady();
+                    }
+                });
 
         ApiClient.get().getStatsStreak(token).enqueue(new Callback<StatsStreakResponse>() {
-            @Override public void onResponse(@NonNull Call<StatsStreakResponse> call,
+            @Override public void onResponse(@NonNull Call<StatsStreakResponse> c,
                                              @NonNull Response<StatsStreakResponse> r) {
                 if (!isAdded()) return;
                 streakData = r.body();
                 onDataReady();
             }
-            @Override public void onFailure(@NonNull Call<StatsStreakResponse> call, @NonNull Throwable t) {
+            @Override public void onFailure(@NonNull Call<StatsStreakResponse> c, @NonNull Throwable t) {
                 if (!isAdded()) return;
                 onDataReady();
             }
         });
 
         ApiClient.get().getStatsSummary(token).enqueue(new Callback<StatsSummaryResponse>() {
-            @Override public void onResponse(@NonNull Call<StatsSummaryResponse> call,
+            @Override public void onResponse(@NonNull Call<StatsSummaryResponse> c,
                                              @NonNull Response<StatsSummaryResponse> r) {
                 if (!isAdded()) return;
                 summaryData = r.body();
                 onDataReady();
             }
-            @Override public void onFailure(@NonNull Call<StatsSummaryResponse> call, @NonNull Throwable t) {
+            @Override public void onFailure(@NonNull Call<StatsSummaryResponse> c, @NonNull Throwable t) {
                 if (!isAdded()) return;
                 onDataReady();
             }
         });
+    }
+
+    private void loadWeeklyOnly() {
+        String token = "Bearer " + session.getToken();
+        String[] range = weekRange();
+        ApiClient.get().getStatsWeekly(token, range[0], range[1])
+                .enqueue(new Callback<StatsWeeklyResponse>() {
+                    @Override public void onResponse(@NonNull Call<StatsWeeklyResponse> c,
+                                                     @NonNull Response<StatsWeeklyResponse> r) {
+                        if (!isAdded()) return;
+                        weeklyData = r.body();
+                        requireActivity().runOnUiThread(() -> rebuildWeeklyContent());
+                    }
+                    @Override public void onFailure(@NonNull Call<StatsWeeklyResponse> c, @NonNull Throwable t) {}
+                });
+    }
+
+    private String[] weekRange() {
+        Calendar end = (Calendar) currentWeekStart.clone();
+        end.add(Calendar.DAY_OF_MONTH, 6);
+        return new String[]{ calToString(currentWeekStart), calToString(end) };
+    }
+
+
+    private void prevWeek() {
+        currentWeekStart.add(Calendar.DAY_OF_MONTH, -7);
+        loadWeeklyOnly();
+    }
+
+    private void nextWeek() {
+        if (isCurrentWeek()) return;
+        currentWeekStart.add(Calendar.DAY_OF_MONTH, 7);
+        loadWeeklyOnly();
     }
 
     private synchronized void onDataReady() {
@@ -118,6 +192,7 @@ public class StatsFragment extends Fragment {
         if (loadedCount < 3) return;
         requireActivity().runOnUiThread(this::buildUI);
     }
+
 
     private void buildUI() {
         if (scrollContainer == null || !isAdded()) return;
@@ -129,51 +204,72 @@ public class StatsFragment extends Fragment {
         scrollContainer.addView(buildSummaryRow(dp));
     }
 
+
     private View buildWeeklyCard(float dp) {
         MaterialCardView card = makeCard(dp);
         LinearLayout.LayoutParams clp = new LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT);
         clp.bottomMargin = (int)(12 * dp);
         card.setLayoutParams(clp);
+        card.setClickable(true);
 
         LinearLayout inner = new LinearLayout(requireContext());
         inner.setOrientation(LinearLayout.VERTICAL);
         inner.setPadding((int)(16*dp), (int)(14*dp), (int)(16*dp), (int)(18*dp));
         inner.setLayoutParams(new LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT));
+        weeklyCardInner = inner;
 
+        buildWeeklyContent(dp);
+        card.addView(inner);
+
+        GestureDetector gd = new GestureDetector(requireContext(),
+                new GestureDetector.SimpleOnGestureListener() {
+                    @Override
+                    public boolean onDown(@NonNull MotionEvent e) { return true; }
+                    @Override
+                    public boolean onFling(MotionEvent e1, MotionEvent e2, float vX, float vY) {
+                        if (e1 == null) return false;
+                        float dx = e2.getX() - e1.getX();
+                        if (Math.abs(dx) > 80 && Math.abs(vX) > 100) {
+                            if (dx < 0) prevWeek(); else nextWeek();
+                            return true;
+                        }
+                        return false;
+                    }
+                });
+        card.setOnTouchListener((v, event) -> gd.onTouchEvent(event));
+        return card;
+    }
+
+    private void rebuildWeeklyContent() {
+        if (weeklyCardInner == null || !isAdded()) return;
+        float dp = requireContext().getResources().getDisplayMetrics().density;
+        weeklyCardInner.removeAllViews();
+        buildWeeklyContent(dp);
+    }
+
+    private void buildWeeklyContent(float dp) {
         float[] values = new float[7];
-        String[] dayLabels = new String[7];
         float avgProgress = 0;
 
         if (weeklyData != null && weeklyData.days != null && !weeklyData.days.isEmpty()) {
             List<StatsWeeklyResponse.WeekDay> days = weeklyData.days;
             float sum = 0;
-            SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd", Locale.ENGLISH);
-            SimpleDateFormat dayFmt = new SimpleDateFormat("EEE", Locale.ENGLISH);
             for (int i = 0; i < Math.min(7, days.size()); i++) {
                 values[i] = days.get(i).progressPercent;
                 sum += values[i];
-                try {
-                    Date d = sdf.parse(days.get(i).date);
-                    dayLabels[i] = dayFmt.format(d).substring(0, 1);
-                } catch (Exception e) {
-                    dayLabels[i] = String.valueOf(i + 1);
-                }
             }
             avgProgress = days.isEmpty() ? 0 : sum / days.size();
-        } else {
-            String[] defaults = {"M", "T", "W", "T", "F", "S", "S"};
-            System.arraycopy(defaults, 0, dayLabels, 0, 7);
         }
 
-        LinearLayout headerRow = new LinearLayout(requireContext());
-        headerRow.setOrientation(LinearLayout.HORIZONTAL);
-        headerRow.setGravity(Gravity.CENTER_VERTICAL);
-        LinearLayout.LayoutParams hrlp = new LinearLayout.LayoutParams(
+        LinearLayout topRow = new LinearLayout(requireContext());
+        topRow.setOrientation(LinearLayout.HORIZONTAL);
+        topRow.setGravity(Gravity.CENTER_VERTICAL);
+        LinearLayout.LayoutParams trlp = new LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT);
-        hrlp.bottomMargin = (int)(2 * dp);
-        headerRow.setLayoutParams(hrlp);
+        trlp.bottomMargin = (int)(4 * dp);
+        topRow.setLayoutParams(trlp);
 
         TextView tvLabel = sectionLabel("WEEKLY PROGRESS", dp);
         tvLabel.setLayoutParams(new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
@@ -184,27 +280,53 @@ public class StatsFragment extends Fragment {
         tvPct.setTextSize(android.util.TypedValue.COMPLEX_UNIT_SP, 22);
         tvPct.setTypeface(null, Typeface.BOLD);
 
-        headerRow.addView(tvLabel);
-        headerRow.addView(tvPct);
+        topRow.addView(tvLabel);
+        topRow.addView(tvPct);
+        weeklyCardInner.addView(topRow);
 
-        TextView tvSub = new TextView(requireContext());
-        tvSub.setText("Last 7 days");
-        tvSub.setTextColor(Color.parseColor("#AAAAAA"));
-        tvSub.setTextSize(android.util.TypedValue.COMPLEX_UNIT_SP, 11);
-        LinearLayout.LayoutParams sublp = new LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT);
-        sublp.bottomMargin = (int)(16 * dp);
-        tvSub.setLayoutParams(sublp);
+        LinearLayout navRow = new LinearLayout(requireContext());
+        navRow.setOrientation(LinearLayout.HORIZONTAL);
+        navRow.setGravity(Gravity.CENTER_VERTICAL);
+        LinearLayout.LayoutParams nrlp = new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT);
+        nrlp.bottomMargin = (int)(16 * dp);
+        navRow.setLayoutParams(nrlp);
 
+        TextView tvPrev = new TextView(requireContext());
+        tvPrev.setText("‹");
+        tvPrev.setTextSize(android.util.TypedValue.COMPLEX_UNIT_SP, 20);
+        tvPrev.setTextColor(Color.parseColor("#5D65D9"));
+        tvPrev.setTypeface(null, Typeface.BOLD);
+        tvPrev.setLayoutParams(new LinearLayout.LayoutParams((int)(28*dp), (int)(28*dp)));
+        tvPrev.setGravity(Gravity.CENTER);
+        tvPrev.setOnClickListener(v -> prevWeek());
+
+        TextView tvWeekLabel = new TextView(requireContext());
+        tvWeekLabel.setText(formatWeekRange(currentWeekStart));
+        tvWeekLabel.setTextColor(Color.parseColor("#AAAAAA"));
+        tvWeekLabel.setTextSize(android.util.TypedValue.COMPLEX_UNIT_SP, 12);
+        tvWeekLabel.setGravity(Gravity.CENTER);
+        tvWeekLabel.setLayoutParams(new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
+
+        tvWeekNext = new TextView(requireContext());
+        tvWeekNext.setText("›");
+        tvWeekNext.setTextSize(android.util.TypedValue.COMPLEX_UNIT_SP, 20);
+        tvWeekNext.setTypeface(null, Typeface.BOLD);
+        tvWeekNext.setLayoutParams(new LinearLayout.LayoutParams((int)(28*dp), (int)(28*dp)));
+        tvWeekNext.setGravity(Gravity.CENTER);
+        tvWeekNext.setOnClickListener(v -> nextWeek());
+        tvWeekNext.setTextColor(Color.parseColor(isCurrentWeek() ? "#CCCCCC" : "#5D65D9"));
+
+        navRow.addView(tvPrev);
+        navRow.addView(tvWeekLabel);
+        navRow.addView(tvWeekNext);
+        weeklyCardInner.addView(navRow);
+
+        String[] dayLabels = {"Mo","Tu","We","Th","Fr","Sa","Su"};
         BarChartView chart = new BarChartView(requireContext(), values, dayLabels);
         chart.setLayoutParams(new LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT, (int)(140 * dp)));
-
-        inner.addView(headerRow);
-        inner.addView(tvSub);
-        inner.addView(chart);
-        card.addView(inner);
-        return card;
+        weeklyCardInner.addView(chart);
     }
 
     private View buildStreakRow(float dp) {

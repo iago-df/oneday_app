@@ -70,7 +70,11 @@ public interface ApiService {
     );
 
     @GET("stats/weekly/")
-    Call<StatsWeeklyResponse> getStatsWeekly(@Header("Authorization") String token);
+    Call<StatsWeeklyResponse> getStatsWeekly(
+            @Header("Authorization") String token,
+            @Query("from") String from,
+            @Query("to") String to
+    );
 
     @GET("stats/streak/")
     Call<StatsStreakResponse> getStatsStreak(@Header("Authorization") String token);
