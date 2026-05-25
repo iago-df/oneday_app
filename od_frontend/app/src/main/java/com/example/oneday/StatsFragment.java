@@ -50,6 +50,7 @@ public class StatsFragment extends Fragment {
     private StatsSummaryResponse summaryData;
     private int loadedCount = 0;
     private Calendar currentWeekStart;
+    private boolean lastNavGoingBack = false;
 
 
     @Nullable
@@ -177,12 +178,14 @@ public class StatsFragment extends Fragment {
 
 
     private void prevWeek() {
+        lastNavGoingBack = true;
         currentWeekStart.add(Calendar.DAY_OF_MONTH, -7);
         loadWeeklyOnly();
     }
 
     private void nextWeek() {
         if (isCurrentWeek()) return;
+        lastNavGoingBack = false;
         currentWeekStart.add(Calendar.DAY_OF_MONTH, 7);
         loadWeeklyOnly();
     }
@@ -232,7 +235,7 @@ public class StatsFragment extends Fragment {
                         if (e1 == null) return false;
                         float dx = e2.getX() - e1.getX();
                         if (Math.abs(dx) > 80 && Math.abs(vX) > 100) {
-                            if (dx < 0) prevWeek(); else nextWeek();
+                            if (dx < 0) nextWeek(); else prevWeek();
                             return true;
                         }
                         return false;
@@ -245,8 +248,35 @@ public class StatsFragment extends Fragment {
     private void rebuildWeeklyContent() {
         if (weeklyCardInner == null || !isAdded()) return;
         float dp = requireContext().getResources().getDisplayMetrics().density;
-        weeklyCardInner.removeAllViews();
-        buildWeeklyContent(dp);
+        int width = weeklyCardInner.getWidth();
+
+        if (width == 0) {
+            weeklyCardInner.removeAllViews();
+            buildWeeklyContent(dp);
+            return;
+        }
+
+        if (weeklyCardInner.getParent() instanceof ViewGroup) {
+            ((ViewGroup) weeklyCardInner.getParent()).setClipChildren(false);
+        }
+
+        float slideOutX = lastNavGoingBack ?  width : -width;
+        float slideInX  = lastNavGoingBack ? -width :  width;
+
+        weeklyCardInner.animate()
+                .translationX(slideOutX)
+                .setDuration(200)
+                .withEndAction(() -> {
+                    if (!isAdded()) return;
+                    weeklyCardInner.removeAllViews();
+                    buildWeeklyContent(dp);
+                    weeklyCardInner.setTranslationX(slideInX);
+                    weeklyCardInner.animate()
+                            .translationX(0f)
+                            .setDuration(200)
+                            .start();
+                })
+                .start();
     }
 
     private void buildWeeklyContent(float dp) {
