@@ -6,6 +6,7 @@ import android.graphics.Color;
 import android.graphics.Paint;
 import android.graphics.RectF;
 import android.graphics.Typeface;
+import android.graphics.drawable.GradientDrawable;
 import android.os.Bundle;
 import android.view.GestureDetector;
 import android.view.Gravity;
@@ -205,6 +206,7 @@ public class StatsFragment extends Fragment {
         scrollContainer.addView(buildWeeklyCard(dp));
         scrollContainer.addView(buildStreakRow(dp));
         scrollContainer.addView(buildSummaryRow(dp));
+        scrollContainer.addView(buildProfileCard(dp));
     }
 
 
@@ -370,7 +372,11 @@ public class StatsFragment extends Fragment {
         int currentStreak = streakData != null ? streakData.currentStreak : 0;
         int bestStreak    = streakData != null ? streakData.bestStreak    : 0;
 
-        MaterialCardView donutCard = makeCard(dp);
+        MaterialCardView donutCard = new MaterialCardView(requireContext());
+        donutCard.setCardBackgroundColor(Color.parseColor("#5D65D9"));
+        donutCard.setRadius(14 * dp);
+        donutCard.setCardElevation(0);
+        donutCard.setStrokeWidth(0);
         LinearLayout.LayoutParams dclp = new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f);
         dclp.setMarginEnd((int)(6 * dp));
         donutCard.setLayoutParams(dclp);
@@ -380,9 +386,9 @@ public class StatsFragment extends Fragment {
         donutInner.setPadding((int)(14*dp), (int)(14*dp), (int)(14*dp), (int)(16*dp));
         donutInner.setGravity(Gravity.CENTER_HORIZONTAL);
         donutInner.setLayoutParams(new LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT));
+                LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.MATCH_PARENT));
 
-        donutInner.addView(sectionLabel("CURRENT STREAK", dp));
+        donutInner.addView(whiteLabel("CURRENT STREAK", dp));
 
         DonutChartView donut = new DonutChartView(requireContext(), currentStreak,
                 Math.max(bestStreak, Math.max(currentStreak, 1)));
@@ -425,6 +431,106 @@ public class StatsFragment extends Fragment {
         row.addView(donutCard);
         row.addView(rightCard);
         return row;
+    }
+
+
+    private View buildProfileCard(float dp) {
+        MaterialCardView card = new MaterialCardView(requireContext());
+        card.setCardBackgroundColor(Color.parseColor("#5D65D9"));
+        card.setRadius(14 * dp);
+        card.setCardElevation(0);
+        card.setStrokeWidth(0);
+        LinearLayout.LayoutParams clp = new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT);
+        clp.topMargin = (int)(12 * dp);
+        card.setLayoutParams(clp);
+
+        LinearLayout row = new LinearLayout(requireContext());
+        row.setOrientation(LinearLayout.HORIZONTAL);
+        row.setGravity(Gravity.CENTER_VERTICAL);
+        row.setPadding((int)(16*dp), (int)(14*dp), (int)(16*dp), (int)(14*dp));
+        row.setLayoutParams(new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT));
+
+        String name     = session.getName();
+        String username = session.getUsername();
+        String email    = session.getEmail();
+        String displayName = (name != null && !name.isEmpty()) ? name
+                : (username != null ? username : "User");
+        String initial = displayName.substring(0, 1).toUpperCase(Locale.ENGLISH);
+
+        android.widget.FrameLayout avatarFrame = new android.widget.FrameLayout(requireContext());
+        int avatarSize = (int)(44 * dp);
+        LinearLayout.LayoutParams aflp = new LinearLayout.LayoutParams(avatarSize, avatarSize);
+        aflp.setMarginEnd((int)(12 * dp));
+        avatarFrame.setLayoutParams(aflp);
+        GradientDrawable circle = new GradientDrawable();
+        circle.setShape(GradientDrawable.OVAL);
+        circle.setColor(Color.parseColor("#7A80E0"));
+        avatarFrame.setBackground(circle);
+        TextView tvInitial = new TextView(requireContext());
+        tvInitial.setText(initial);
+        tvInitial.setTextColor(Color.WHITE);
+        tvInitial.setTextSize(android.util.TypedValue.COMPLEX_UNIT_SP, 18);
+        tvInitial.setTypeface(null, Typeface.BOLD);
+        tvInitial.setGravity(Gravity.CENTER);
+        tvInitial.setLayoutParams(new android.widget.FrameLayout.LayoutParams(
+                android.widget.FrameLayout.LayoutParams.MATCH_PARENT,
+                android.widget.FrameLayout.LayoutParams.MATCH_PARENT));
+        avatarFrame.addView(tvInitial);
+        row.addView(avatarFrame);
+
+        LinearLayout textCol = new LinearLayout(requireContext());
+        textCol.setOrientation(LinearLayout.VERTICAL);
+        textCol.setLayoutParams(new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
+
+        TextView tvName = new TextView(requireContext());
+        tvName.setText(displayName);
+        tvName.setTextColor(Color.WHITE);
+        tvName.setTextSize(android.util.TypedValue.COMPLEX_UNIT_SP, 15);
+        tvName.setTypeface(null, Typeface.BOLD);
+        tvName.setLayoutParams(new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT));
+        textCol.addView(tvName);
+
+        if (email != null && !email.isEmpty()) {
+            TextView tvEmail = new TextView(requireContext());
+            tvEmail.setText(email);
+            tvEmail.setTextColor(Color.parseColor("#BEC3F0"));
+            tvEmail.setTextSize(android.util.TypedValue.COMPLEX_UNIT_SP, 12);
+            tvEmail.setLayoutParams(new LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT));
+            textCol.addView(tvEmail);
+        }
+        row.addView(textCol);
+
+        GradientDrawable btnBg = new GradientDrawable();
+        btnBg.setShape(GradientDrawable.RECTANGLE);
+        btnBg.setColor(Color.WHITE);
+        btnBg.setCornerRadius(18 * dp);
+
+        TextView btnLogout = new TextView(requireContext());
+        btnLogout.setText("Log out");
+        btnLogout.setTextColor(Color.parseColor("#5D65D9"));
+        btnLogout.setTextSize(android.util.TypedValue.COMPLEX_UNIT_SP, 12);
+        btnLogout.setTypeface(null, Typeface.BOLD);
+        btnLogout.setGravity(Gravity.CENTER);
+        btnLogout.setBackground(btnBg);
+        LinearLayout.LayoutParams blp = new LinearLayout.LayoutParams((int)(82 * dp), (int)(34 * dp));
+        blp.setMarginStart((int)(10 * dp));
+        btnLogout.setLayoutParams(blp);
+        btnLogout.setOnClickListener(v -> {
+            session.clearSession();
+            android.content.Intent intent = new android.content.Intent(
+                    requireContext(), LoginActivity.class);
+            intent.setFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK |
+                    android.content.Intent.FLAG_ACTIVITY_CLEAR_TASK);
+            startActivity(intent);
+        });
+        row.addView(btnLogout);
+
+        card.addView(row);
+        return card;
     }
 
 
@@ -507,7 +613,7 @@ public class StatsFragment extends Fragment {
     private TextView bigNumber(String text, float dp) {
         TextView tv = new TextView(requireContext());
         tv.setText(text);
-        tv.setTextColor(Color.parseColor("#222222"));
+        tv.setTextColor(Color.parseColor("#5D65D9"));
         tv.setTextSize(android.util.TypedValue.COMPLEX_UNIT_SP, 26);
         tv.setTypeface(null, Typeface.BOLD);
         tv.setGravity(Gravity.CENTER);
@@ -526,6 +632,44 @@ public class StatsFragment extends Fragment {
                 LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT));
         return tv;
     }
+
+    private TextView whiteLabel(String text, float dp) {
+        TextView tv = new TextView(requireContext());
+        tv.setText(text);
+        tv.setTextColor(Color.parseColor("#BEC3F0"));
+        tv.setTextSize(android.util.TypedValue.COMPLEX_UNIT_SP, 10);
+        tv.setTypeface(null, Typeface.BOLD);
+        tv.setLetterSpacing(0.08f);
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT);
+        lp.bottomMargin = (int)(4 * dp);
+        tv.setLayoutParams(lp);
+        return tv;
+    }
+
+    private TextView whiteNumber(String text, float dp) {
+        TextView tv = new TextView(requireContext());
+        tv.setText(text);
+        tv.setTextColor(Color.WHITE);
+        tv.setTextSize(android.util.TypedValue.COMPLEX_UNIT_SP, 26);
+        tv.setTypeface(null, Typeface.BOLD);
+        tv.setGravity(Gravity.CENTER);
+        tv.setLayoutParams(new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT));
+        return tv;
+    }
+
+    private TextView whiteSubLabel(String text, float dp) {
+        TextView tv = new TextView(requireContext());
+        tv.setText(text);
+        tv.setTextColor(Color.parseColor("#BEC3F0"));
+        tv.setTextSize(android.util.TypedValue.COMPLEX_UNIT_SP, 11);
+        tv.setGravity(Gravity.CENTER);
+        tv.setLayoutParams(new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT));
+        return tv;
+    }
+
 
     private String formatDate(String iso) {
         try {
@@ -601,23 +745,20 @@ public class StatsFragment extends Fragment {
         private final Paint numPaint     = new Paint(Paint.ANTI_ALIAS_FLAG);
         private final Paint labelPaint   = new Paint(Paint.ANTI_ALIAS_FLAG);
 
+
         DonutChartView(Context ctx, int value, int maxVal) {
             super(ctx);
             this.value  = value;
             this.maxVal = maxVal > 0 ? maxVal : 1;
-
             bgArcPaint.setStyle(Paint.Style.STROKE);
-            bgArcPaint.setColor(Color.parseColor("#ECEEFE"));
-
+            bgArcPaint.setColor(Color.parseColor("#7A80E0"));
             fillArcPaint.setStyle(Paint.Style.STROKE);
-            fillArcPaint.setColor(Color.parseColor("#5D65D9"));
+            fillArcPaint.setColor(Color.WHITE);
             fillArcPaint.setStrokeCap(Paint.Cap.ROUND);
-
-            numPaint.setColor(Color.parseColor("#5D65D9"));
+            numPaint.setColor(Color.WHITE);
             numPaint.setTypeface(Typeface.DEFAULT_BOLD);
             numPaint.setTextAlign(Paint.Align.CENTER);
-
-            labelPaint.setColor(Color.parseColor("#AAAAAA"));
+            labelPaint.setColor(Color.parseColor("#BEC3F0"));
             labelPaint.setTextAlign(Paint.Align.CENTER);
             labelPaint.setTypeface(Typeface.DEFAULT_BOLD);
             labelPaint.setLetterSpacing(0.1f);
