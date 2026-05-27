@@ -10,6 +10,7 @@ public class SessionManager {
     private static final String KEY_USERNAME = "username";
     private static final String KEY_EMAIL    = "email";
     private static final String KEY_NAME     = "name";
+    private static final String KEY_LAST_DATE = "last_opened_date";
 
     private final SharedPreferences prefs;
 
@@ -55,4 +56,8 @@ public class SessionManager {
     public void clearSession() {
         prefs.edit().clear().apply();
     }
+
+    public String getLastOpenedDate() {return prefs.getString(KEY_LAST_DATE, null);}
+
+    public void saveLastOpenedDate(String date) {prefs.edit().putString(KEY_LAST_DATE, date).apply();}
 }

@@ -4,6 +4,7 @@ import com.example.oneday.api.models.ActivityData;
 import com.example.oneday.api.models.AuthResponse;
 import com.example.oneday.api.models.CalendarResponse;
 import com.example.oneday.api.models.DashboardResponse;
+import com.example.oneday.api.models.DayEntryData;
 import com.example.oneday.api.models.GoalData;
 import com.example.oneday.api.models.GoalsResponse;
 import com.example.oneday.api.models.LoginRequest;
@@ -87,5 +88,24 @@ public interface ApiService {
             @Header("Authorization") String token,
             @Query("year") int year,
             @Query("month") int month
+    );
+
+    @PUT("day-entries/{id}/reopen/")
+    Call<DayEntryData> reopenDayEntry(
+            @Path("id") int id,
+            @Header("Authorization") String token
+    );
+
+    @PUT("day-entries/{id}/")
+    Call<DayEntryData> updateDayEntry(
+            @Path("id") int id,
+            @Header("Authorization") String token,
+            @Body Map<String, Object> body
+    );
+
+    @PUT("day-entries/{id}/close/")
+    Call<DayEntryData> closeDayEntry(
+            @Path("id") int id,
+            @Header("Authorization") String token
     );
 }

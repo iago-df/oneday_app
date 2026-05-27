@@ -7,11 +7,11 @@
     android:background="@color/white">
 
     <LinearLayout
+        android:id="@+id/rootLayout"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
         android:orientation="vertical">
 
-        <!-- Fixed header -->
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
@@ -21,7 +21,6 @@
             android:paddingTop="40dp"
             android:paddingBottom="14dp">
 
-            <!-- Greeting + Date on same line -->
             <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
@@ -48,8 +47,8 @@
 
             </LinearLayout>
 
-            <!-- Today's Objective card -->
             <com.google.android.material.card.MaterialCardView
+                android:id="@+id/cardObjective"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 app:cardBackgroundColor="#5D65D9"
@@ -125,7 +124,6 @@
 
         </LinearLayout>
 
-        <!-- Swipeable pages: Timeline / Quick Tasks -->
         <androidx.viewpager2.widget.ViewPager2
             android:id="@+id/viewPager"
             android:layout_width="match_parent"
@@ -135,7 +133,6 @@
             android:layout_marginEnd="20dp"
             android:layout_marginBottom="8dp" />
 
-        <!-- Dot indicator -->
         <LinearLayout
             android:id="@+id/dotsLayout"
             android:layout_width="wrap_content"
