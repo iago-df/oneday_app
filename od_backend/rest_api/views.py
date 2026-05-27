@@ -286,7 +286,6 @@ def _goal_json(goal):
         'deadline': goal.deadline.isoformat() if goal.deadline else None,
         'is_active': goal.is_active,
         'category_id': goal.category_id,
-        'parent_goal_id': goal.parent_goal_id,
         'created_at': goal.created_at.isoformat(),
         'updated_at': goal.updated_at.isoformat(),
     }
@@ -344,12 +343,6 @@ class GoalsListView(AuthMixin, View):
             except Category.DoesNotExist:
                 return JsonResponse({'error': 'Category not found'}, status=404)
 
-        parent_goal = None
-        if data.get('parent_goal_id'):
-            try:
-                parent_goal = Goal.objects.get(id=data['parent_goal_id'], user=self.user)
-            except Goal.DoesNotExist:
-                return JsonResponse({'error': 'Parent goal not found'}, status=404)
 
         start_date, err = _parse_date(data.get('start_date'), 'start_date')
         if err:
@@ -379,7 +372,6 @@ class GoalsListView(AuthMixin, View):
             deadline=deadline,
             is_active=data.get('is_active', True),
             category=category,
-            parent_goal=parent_goal,
         )
 
         return JsonResponse(_goal_json(goal), status=201)
@@ -434,16 +426,6 @@ class GoalsDetailView(AuthMixin, View):
                 except Category.DoesNotExist:
                     return JsonResponse({'error': 'Category not found'}, status=404)
 
-        if 'parent_goal_id' in data:
-            if data['parent_goal_id'] is None:
-                goal.parent_goal = None
-            else:
-                if data['parent_goal_id'] == goal.id:
-                    return JsonResponse({'error': 'A goal cannot be its own parent'}, status=400)
-                try:
-                    goal.parent_goal = Goal.objects.get(id=data['parent_goal_id'], user=self.user)
-                except Goal.DoesNotExist:
-                    return JsonResponse({'error': 'Parent goal not found'}, status=404)
 
         simple_fields = (
             'description', 'goal_type', 'frequency', 'status',
@@ -1379,3 +1361,19 @@ class CalendarView(AuthMixin, View):
             'month': month,
             'days': days,
         })
+
+class DayEntriesReopenView(AuthMixin, View):
+    def put(self, request, id):
+        try:
+            entry = DayEntry.objects.select_related('main_goal').get(id=id, user=self.user)
+        except DayEntry.DoesNotExist:
+            return JsonResponse({'error': 'DayEntry not found'}, status=404)
+
+        if not entry.is_closed:
+            return JsonResponse({'error': 'DayEntry is not closed'}, status=409)
+
+        entry.is_closed = False
+        entry.closed_at = None
+        entry.status = 'open'
+        entry.save()
+        return JsonResponse(_day_entry_json(entry))

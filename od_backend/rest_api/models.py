@@ -70,9 +70,6 @@ class Goal(models.Model):
     ]
 
     user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='goals')
-    parent_goal = models.ForeignKey(
-        'self', on_delete=models.SET_NULL, null=True, blank=True, related_name='subgoals'
-    )
     title = models.CharField(max_length=255)
     description = models.TextField(blank=True, null=True)
     category = models.ForeignKey(
