@@ -30,63 +30,25 @@ class UserProfile(models.Model):
         return self.name
 
 
-class Category(models.Model):
-    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='categories')
-    name = models.CharField(max_length=100)
-    icon = models.CharField(max_length=50, blank=True, null=True)
-    color = models.CharField(max_length=20, blank=True, null=True)
-    is_active = models.BooleanField(default=True)
-    created_at = models.DateTimeField(auto_now_add=True)
-    updated_at = models.DateTimeField(auto_now=True)
-
-    class Meta:
-        unique_together = ('user', 'name')
-
-    def __str__(self):
-        return self.name
-
-
-
 class Goal(models.Model):
-    GOAL_TYPE_CHOICES = [
-        ('daily', 'Daily'),
-        ('weekly', 'Weekly'),
-        ('monthly', 'Monthly'),
-        ('custom', 'Custom'),
-    ]
-    FREQUENCY_CHOICES = [
-        ('once', 'Once'),
-        ('daily', 'Daily'),
-        ('weekly', 'Weekly'),
-        ('monthly', 'Monthly'),
-    ]
     STATUS_CHOICES = [
         ('planned', 'Planned'),
         ('in_progress', 'In Progress'),
         ('completed', 'Completed'),
         ('partial', 'Partial'),
         ('failed', 'Failed'),
-        ('archived', 'Archived'),
     ]
 
     user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='goals')
     title = models.CharField(max_length=255)
     description = models.TextField(blank=True, null=True)
-    category = models.ForeignKey(
-        Category, on_delete=models.SET_NULL, null=True, blank=True, related_name='goals'
-    )
-    goal_type = models.CharField(max_length=20, choices=GOAL_TYPE_CHOICES, default='daily')
-    frequency = models.CharField(max_length=20, choices=FREQUENCY_CHOICES, default='once')
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='planned')
-    start_date = models.DateField(null=True, blank=True)
-    end_date = models.DateField(null=True, blank=True)
     deadline = models.DateField(null=True, blank=True)
+    target_days = models.PositiveIntegerField(default=30)
     progress_percent = models.FloatField(
         default=0,
         validators=[MinValueValidator(0), MaxValueValidator(100)],
     )
-    target_value = models.FloatField(null=True, blank=True)
-    current_value = models.FloatField(null=True, blank=True)
     is_active = models.BooleanField(default=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -115,10 +77,6 @@ class DayEntry(models.Model):
         default=0,
         validators=[MinValueValidator(0), MaxValueValidator(100)],
     )
-    dedication_minutes = models.IntegerField(null=True, blank=True)
-    result_text = models.TextField(blank=True, null=True)
-    reflection_text = models.TextField(blank=True, null=True)
-    failure_reason = models.TextField(blank=True, null=True)
     is_closed = models.BooleanField(default=False)
     closed_at = models.DateTimeField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
@@ -129,7 +87,6 @@ class DayEntry(models.Model):
 
     def __str__(self):
         return f'{self.user.username} — {self.date}'
-
 
 
 class Activity(models.Model):
@@ -152,21 +109,11 @@ class Activity(models.Model):
     day_entry = models.ForeignKey(
         DayEntry, on_delete=models.CASCADE, null=True, blank=True, related_name='activities'
     )
-    goal = models.ForeignKey(
-        Goal, on_delete=models.SET_NULL, null=True, blank=True, related_name='activities'
-    )
-    category = models.ForeignKey(
-        Category, on_delete=models.SET_NULL, null=True, blank=True, related_name='activities'
-    )
     title = models.CharField(max_length=255)
-    description = models.TextField(blank=True, null=True)
     start_time = models.TimeField(null=True, blank=True)
-    end_time = models.TimeField(null=True, blank=True)
     estimated_minutes = models.IntegerField(null=True, blank=True)
-    actual_minutes = models.IntegerField(null=True, blank=True)
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='pending')
     activity_type = models.CharField(max_length=20, choices=ACTIVITY_TYPE_CHOICES, default='task')
-    order = models.IntegerField(default=0)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 

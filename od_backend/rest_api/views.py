@@ -9,7 +9,7 @@ from django.contrib.auth.models import User
 from django.utils import timezone
 
 from .helpers import get_authenticated_user
-from .models import AuthToken, UserProfile, Category, Goal, DayEntry, Activity
+from .models import AuthToken, UserProfile, Goal, DayEntry, Activity
 
 
 class AuthMixin:

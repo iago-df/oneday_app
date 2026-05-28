@@ -8,8 +8,6 @@ urlpatterns = [
     path('auth/me/', views.MeView.as_view(), name='auth_me'),
     path('profile/', views.ProfileView.as_view(), name='profile_view'),
 
-    path('categories/', views.CategoriesListView.as_view(), name='categories_list'),
-    path('categories/<int:id>/', views.CategoriesDetailView.as_view(), name='categories_detail'),
 
     path('goals/', views.GoalsListView.as_view(), name='goals_list'),
     path('goals/<int:id>/', views.GoalsDetailView.as_view(), name='goals_detail'),
@@ -27,7 +25,6 @@ urlpatterns = [
     path('activities/<int:id>/', views.ActivitiesDetailView.as_view(), name='activities_detail'),
 
     path('stats/summary/', views.StatsSummaryView.as_view(), name='stats_summary'),
-    path('stats/categories/', views.StatsCategoriesView.as_view(), name='stats_categories'),
     path('stats/streak/', views.StatsStreakView.as_view(), name='stats_streak'),
     path('stats/weekly/', views.StatsWeeklyView.as_view(), name='stats_weekly'),
 
