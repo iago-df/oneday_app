@@ -438,12 +438,21 @@ _VALID_ACTIVITY_TYPES = {'task', 'session', 'habit', 'event', 'deep_work'}
 def _main_goal_summary(goal):
     if not goal:
         return None
+    days_completed = DayEntry.objects.filter(
+        user=goal.user,
+        main_goal=goal,
+        is_closed=True,
+        status__in=['completed', 'partial'],
+    ).count()
+    target_days = goal.target_days or 1
+    progress_percent = min(round(days_completed / target_days * 100, 1), 100)
     return {
         'id': goal.id,
         'title': goal.title,
         'status': goal.status,
-        'goal_type': goal.goal_type,
-        'progress_percent': goal.progress_percent,
+        'target_days': goal.target_days,
+        'days_completed': days_completed,
+        'progress_percent': progress_percent,
         'deadline': goal.deadline.isoformat() if goal.deadline else None,
     }
 
@@ -454,10 +463,6 @@ def _day_entry_json(entry):
         'date': entry.date.isoformat(),
         'status': entry.status,
         'progress_percent': entry.progress_percent,
-        'dedication_minutes': entry.dedication_minutes,
-        'result_text': entry.result_text,
-        'reflection_text': entry.reflection_text,
-        'failure_reason': entry.failure_reason,
         'is_closed': entry.is_closed,
         'closed_at': entry.closed_at.isoformat() if entry.closed_at else None,
         'main_goal_id': entry.main_goal_id,
@@ -467,11 +472,28 @@ def _day_entry_json(entry):
     }
 
 
+
+def _compute_day_status(entry):
+    activities = Activity.objects.filter(day_entry=entry)
+    total = activities.count()
+    if total == 0:
+        return 'completed', 100
+    completed = activities.filter(status='completed').count()
+    pct = round(completed / total * 100, 1)
+    if pct >= 80:
+        status = 'completed'
+    elif pct >= 30:
+        status = 'partial'
+    else:
+        status = 'failed'
+    return status, pct
+
+
 def _apply_close_fields(entry, data, close=False):
     if 'status' in data:
         entry.status = data['status']
     elif close and not entry.is_closed:
-        entry.status = 'completed'
+        entry.status, entry.progress_percent = _compute_day_status(entry)
 
     if 'progress_percent' in data:
         try:
@@ -481,18 +503,31 @@ def _apply_close_fields(entry, data, close=False):
         if not (0 <= pct <= 100):
             return JsonResponse({'error': 'progress_percent must be between 0 and 100'}, status=400)
         entry.progress_percent = pct
-    elif close and entry.status == 'completed':
-        entry.progress_percent = 100
-
-    for field in ('result_text', 'reflection_text', 'failure_reason', 'dedication_minutes'):
-        if field in data:
-            entry.__setattr__(field, data[field] if data[field] != '' else None)
 
     if close:
         entry.is_closed = True
         entry.closed_at = timezone.now()
 
     return None
+
+
+def _auto_close_past_entries(user):
+    today = dt.date.today()
+    unclosed = DayEntry.objects.filter(
+        user=user,
+        is_closed=False,
+        date__lt=today,
+    )
+    for entry in unclosed:
+        total = Activity.objects.filter(day_entry=entry).count()
+        if total == 0:
+            continue
+        status, pct = _compute_day_status(entry)
+        entry.status = status
+        entry.progress_percent = pct
+        entry.is_closed = True
+        entry.closed_at = timezone.now()
+        entry.save()
 
 
 
