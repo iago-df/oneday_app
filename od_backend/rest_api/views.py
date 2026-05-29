@@ -271,21 +271,26 @@ def _parse_date(value, field_name):
 
 
 def _goal_json(goal):
+    days_completed = DayEntry.objects.filter(
+        user=goal.user,
+        main_goal=goal,
+        is_closed=True,
+        status__in=['completed', 'partial'],
+    ).count()
+    target_days = goal.target_days or 1
+    progress_percent = min(round(days_completed / target_days * 100, 1), 100)
+    if goal.progress_percent != progress_percent:
+        Goal.objects.filter(pk=goal.pk).update(progress_percent=progress_percent)
     return {
         'id': goal.id,
         'title': goal.title,
         'description': goal.description,
-        'goal_type': goal.goal_type,
-        'frequency': goal.frequency,
         'status': goal.status,
-        'progress_percent': goal.progress_percent,
-        'target_value': goal.target_value,
-        'current_value': goal.current_value,
-        'start_date': goal.start_date.isoformat() if goal.start_date else None,
-        'end_date': goal.end_date.isoformat() if goal.end_date else None,
+        'target_days': goal.target_days,
+        'days_completed': days_completed,
+        'progress_percent': progress_percent,
         'deadline': goal.deadline.isoformat() if goal.deadline else None,
         'is_active': goal.is_active,
-        'category_id': goal.category_id,
         'created_at': goal.created_at.isoformat(),
         'updated_at': goal.updated_at.isoformat(),
     }
@@ -328,52 +333,25 @@ class GoalsListView(AuthMixin, View):
         if not title:
             return JsonResponse({'error': 'title is required'}, status=400)
 
-        progress_percent = data.get('progress_percent', 0)
-        try:
-            progress_percent = float(progress_percent)
-        except (TypeError, ValueError):
-            return JsonResponse({'error': 'progress_percent must be a number'}, status=400)
-        if not (0 <= progress_percent <= 100):
-            return JsonResponse({'error': 'progress_percent must be between 0 and 100'}, status=400)
-
-        category = None
-        if data.get('category_id'):
-            try:
-                category = Category.objects.get(id=data['category_id'], user=self.user)
-            except Category.DoesNotExist:
-                return JsonResponse({'error': 'Category not found'}, status=404)
-
-
-        start_date, err = _parse_date(data.get('start_date'), 'start_date')
-        if err:
-            return err
-
-        end_date, err = _parse_date(data.get('end_date'), 'end_date')
-        if err:
-            return err
-
         deadline, err = _parse_date(data.get('deadline'), 'deadline')
         if err:
             return err
 
+        target_days = data.get('target_days', 30)
+        try:
+            target_days = max(1, int(target_days))
+        except (TypeError, ValueError):
+            return JsonResponse({'error': 'target_days must be a positive integer'}, status=400)
 
         goal = Goal.objects.create(
             user=self.user,
             title=title,
             description=data.get('description') or None,
-            goal_type=data.get('goal_type', 'daily'),
-            frequency=data.get('frequency', 'once'),
             status=data.get('status', 'planned'),
-            progress_percent=progress_percent,
-            target_value=data.get('target_value') or None,
-            current_value=data.get('current_value') or None,
-            start_date=start_date,
-            end_date=end_date,
             deadline=deadline,
+            target_days=target_days,
             is_active=data.get('is_active', True),
-            category=category,
         )
-
         return JsonResponse(_goal_json(goal), status=201)
 
 
@@ -417,27 +395,24 @@ class GoalsDetailView(AuthMixin, View):
                 return JsonResponse({'error': 'progress_percent must be between 0 and 100'}, status=400)
             goal.progress_percent = progress_percent
 
-        if 'category_id' in data:
-            if data['category_id'] is None:
-                goal.category = None
-            else:
-                try:
-                    goal.category = Category.objects.get(id=data['category_id'], user=self.user)
-                except Category.DoesNotExist:
-                    return JsonResponse({'error': 'Category not found'}, status=404)
+        if 'deadline' in data:
+            parsed, err = _parse_date(data['deadline'], 'deadline')
+            if err:
+                return err
+            goal.deadline = parsed
 
+        if 'target_days' in data:
+            try:
+                goal.target_days = max(1, int(data['target_days']))
+            except (TypeError, ValueError):
+                return JsonResponse({'error': 'target_days must be a positive integer'}, status=400)
 
-        simple_fields = (
-            'description', 'goal_type', 'frequency', 'status',
-            'target_value', 'current_value', 'start_date',
-            'end_date', 'deadline', 'is_active',
-        )
+        simple_fields = ('description', 'status', 'is_active')
         for field in simple_fields:
             if field in data:
                 setattr(goal, field, data[field] if data[field] != '' else None)
 
         goal.save()
-
         return JsonResponse(_goal_json(goal))
 
 
