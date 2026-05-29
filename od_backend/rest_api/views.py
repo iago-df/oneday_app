@@ -591,10 +591,6 @@ class DayEntriesListView(AuthMixin, View):
                 main_goal=main_goal,
                 status=status_val,
                 progress_percent=progress_percent,
-                dedication_minutes=data.get('dedication_minutes') or None,
-                result_text=data.get('result_text') or None,
-                reflection_text=data.get('reflection_text') or None,
-                failure_reason=data.get('failure_reason') or None,
             )
         except Exception:
             return JsonResponse({'error': 'Invalid date format. Use YYYY-MM-DD'}, status=400)
@@ -663,10 +659,6 @@ class DayEntriesItemView(AuthMixin, View):
             entry.status = data['status']
             if data['status'] == 'completed' and 'progress_percent' not in data and entry.progress_percent == 0:
                 entry.progress_percent = 100
-
-        for field in ('dedication_minutes', 'result_text', 'reflection_text', 'failure_reason'):
-            if field in data:
-                entry.__setattr__(field, data[field] if data[field] != '' else None)
 
         entry.save()
         return JsonResponse(_day_entry_json(entry))
@@ -744,17 +736,11 @@ def _activity_json(activity):
     return {
         'id': activity.id,
         'title': activity.title,
-        'description': activity.description,
         'activity_type': activity.activity_type,
         'status': activity.status,
         'estimated_minutes': activity.estimated_minutes,
-        'actual_minutes': activity.actual_minutes,
         'start_time': _safe_time(activity.start_time),
-        'end_time': _safe_time(activity.end_time),
-        'order': activity.order,
         'day_entry_id': activity.day_entry_id,
-        'goal_id': activity.goal_id,
-        'category_id': activity.category_id,
         'created_at': activity.created_at.isoformat(),
         'updated_at': activity.updated_at.isoformat(),
     }
@@ -772,7 +758,6 @@ def _validate_positive_int(value, field_name):
 
 def _resolve_activity_fks(data, user):
     fks = {}
-
     if 'day_entry_id' in data:
         if data['day_entry_id'] is None:
             fks['day_entry'] = None
@@ -781,25 +766,6 @@ def _resolve_activity_fks(data, user):
                 fks['day_entry'] = DayEntry.objects.get(id=data['day_entry_id'], user=user)
             except DayEntry.DoesNotExist:
                 return None, JsonResponse({'error': 'DayEntry not found'}, status=404)
-
-    if 'goal_id' in data:
-        if data['goal_id'] is None:
-            fks['goal'] = None
-        else:
-            try:
-                fks['goal'] = Goal.objects.get(id=data['goal_id'], user=user)
-            except Goal.DoesNotExist:
-                return None, JsonResponse({'error': 'Goal not found'}, status=404)
-
-    if 'category_id' in data:
-        if data['category_id'] is None:
-            fks['category'] = None
-        else:
-            try:
-                fks['category'] = Category.objects.get(id=data['category_id'], user=user)
-            except Category.DoesNotExist:
-                return None, JsonResponse({'error': 'Category not found'}, status=404)
-
     return fks, None
 
 
@@ -807,7 +773,7 @@ def _resolve_activity_fks(data, user):
 
 class ActivitiesListView(AuthMixin, View):
     def get(self, request):
-        qs = Activity.objects.filter(user=self.user).order_by('day_entry__date', 'order', 'created_at')
+        qs = Activity.objects.filter(user=self.user).order_by('day_entry__date', 'created_at')
 
         day_entry_id = request.GET.get('day_entry_id')
         status = request.GET.get('status')
@@ -862,17 +828,11 @@ class ActivitiesListView(AuthMixin, View):
         activity = Activity.objects.create(
             user=self.user,
             day_entry=fks.get('day_entry'),
-            goal=fks.get('goal'),
-            category=fks.get('category'),
             title=title,
-            description=data.get('description') or None,
             activity_type=activity_type,
             status=status_val,
             estimated_minutes=estimated_minutes,
-            actual_minutes=actual_minutes,
             start_time=data.get('start_time') or None,
-            end_time=data.get('end_time') or None,
-            order=data.get('order', 0),
         )
         activity = Activity.objects.get(id=activity.id)
         return JsonResponse(_activity_json(activity), status=201)
@@ -928,26 +888,14 @@ class ActivitiesDetailView(AuthMixin, View):
                     return err
                 activity.estimated_minutes = v
 
-        if 'actual_minutes' in data:
-            if data['actual_minutes'] is None:
-                activity.actual_minutes = None
-            else:
-                v, err = _validate_positive_int(data['actual_minutes'], 'actual_minutes')
-                if err:
-                    return err
-                activity.actual_minutes = v
-        elif activity.status == 'completed' and activity.actual_minutes is None and activity.estimated_minutes:
-            activity.actual_minutes = activity.estimated_minutes
-
         fks, err = _resolve_activity_fks(data, self.user)
         if err:
             return err
         for attr, val in fks.items():
             setattr(activity, attr, val)
 
-        for field in ('description', 'start_time', 'end_time', 'order'):
-            if field in data:
-                setattr(activity, field, data[field] if data[field] != '' else None)
+        if 'start_time' in data:
+            activity.start_time = data['start_time'] if data['start_time'] != '' else None
 
         activity.save()
         activity.refresh_from_db()
@@ -977,7 +925,7 @@ class DayEntryActivitiesView(AuthMixin, View):
             return err
         qs = (Activity.objects
               .filter(user=self.user, day_entry=entry)
-              .order_by('order', 'created_at'))
+              .order_by('created_at'))
         return JsonResponse({'activities': [_activity_json(a) for a in qs]})
 
 
@@ -1025,17 +973,11 @@ class DayEntryActivitiesView(AuthMixin, View):
         activity = Activity.objects.create(
             user=self.user,
             day_entry=entry,
-            goal=fks.get('goal'),
-            category=fks.get('category'),
             title=title,
-            description=data.get('description') or None,
             activity_type=activity_type,
             status=status_val,
             estimated_minutes=estimated_minutes,
-            actual_minutes=actual_minutes,
             start_time=data.get('start_time') or None,
-            end_time=data.get('end_time') or None,
-            order=data.get('order', 0),
         )
         activity = Activity.objects.get(id=activity.id)
         return JsonResponse(_activity_json(activity), status=201)
@@ -1058,8 +1000,7 @@ class DayEntriesDetailView(AuthMixin, View):
 
         activities = (Activity.objects
                       .filter(user=self.user, day_entry=entry)
-                      .select_related('category')
-                      .order_by('order', 'created_at'))
+                      .order_by('created_at'))
         return JsonResponse(_day_entry_detail_json(entry, activities))
 
 
@@ -1121,7 +1062,6 @@ class StatsSummaryView(AuthMixin, View):
         )
         total_activities = activities.count()
         completed_activities = activities.filter(status='completed').count()
-        total_minutes = sum(v for v in activities.values_list('actual_minutes', flat=True) if v is not None)
         avg_progress = sum(e.progress_percent for e in entries) / total_days if total_days else 0
         streak = _compute_streak(self.user, dt.date.today())
 
@@ -1139,69 +1079,9 @@ class StatsSummaryView(AuthMixin, View):
                 'total': total_activities,
                 'completed': completed_activities,
                 'completion_rate': round(completed_activities / total_activities * 100, 1) if total_activities else 0,
-                'total_minutes': total_minutes,
             },
             'streak': streak,
         })
-
-
-
-class StatsCategoriesView(AuthMixin, View):
-    def get(self, request):
-        date_from, err = _parse_date_param(request, 'from')
-        if err:
-            return err
-        date_to, err = _parse_date_param(request, 'to')
-        if err:
-            return err
-        if not date_from or not date_to:
-            date_from, date_to = _default_range()
-
-        activities = Activity.objects.filter(
-            user=self.user,
-            day_entry__date__gte=date_from,
-            day_entry__date__lte=date_to,
-        ).select_related('category')
-
-        cat_map = {}
-        uncategorized = {'id': None, 'name': 'Uncategorized', 'total': 0, 'completed': 0, 'minutes': 0}
-        for a in activities:
-            if a.category_id is None:
-                uncategorized['total'] += 1
-                if a.status == 'completed':
-                    uncategorized['completed'] += 1
-                if a.actual_minutes:
-                    uncategorized['minutes'] += a.actual_minutes
-            else:
-                key = a.category_id
-                if key not in cat_map:
-                    cat_map[key] = {
-                        'id': a.category_id,
-                        'name': a.category.name,
-                        'icon': a.category.icon,
-                        'color': a.category.color,
-                        'total': 0,
-                        'completed': 0,
-                        'minutes': 0,
-                    }
-                cat_map[key]['total'] += 1
-                if a.status == 'completed':
-                    cat_map[key]['completed'] += 1
-                if a.actual_minutes:
-                    cat_map[key]['minutes'] += a.actual_minutes
-
-        results = sorted(cat_map.values(), key=lambda x: x['minutes'], reverse=True)
-        if uncategorized['total'] > 0:
-            results.append(uncategorized)
-
-        for r in results:
-            r['completion_rate'] = round(r['completed'] / r['total'] * 100, 1) if r['total'] else 0
-
-        return JsonResponse({
-            'period': {'from': date_from.isoformat(), 'to': date_to.isoformat()},
-            'categories': results,
-        })
-
 
 
 class StatsStreakView(AuthMixin, View):
@@ -1268,7 +1148,6 @@ class StatsWeeklyView(AuthMixin, View):
             entry = entries.get(d)
             day_acts = activities_by_date.get(d, [])
             completed_acts = sum(1 for a in day_acts if a.status == 'completed')
-            minutes = sum(a.actual_minutes for a in day_acts if a.actual_minutes)
             days.append({
                 'date': d.isoformat(),
                 'status': entry.status if entry else None,
@@ -1276,7 +1155,6 @@ class StatsWeeklyView(AuthMixin, View):
                 'is_closed': entry.is_closed if entry else False,
                 'activities_total': len(day_acts),
                 'activities_completed': completed_acts,
-                'minutes': minutes,
             })
 
         return JsonResponse({
@@ -1291,13 +1169,14 @@ class DashboardTodayView(AuthMixin, View):
     def get(self, request):
         today = dt.date.today()
 
+        _auto_close_past_entries(self.user)
+
         entry, _ = DayEntry.objects.get_or_create(user=self.user, date=today)
         entry = DayEntry.objects.select_related('main_goal').get(id=entry.id)
 
         activities = (Activity.objects
                       .filter(user=self.user, day_entry=entry)
-                      .select_related('category')
-                      .order_by('order', 'created_at'))
+                      .order_by('created_at'))
 
         try:
             profile = self.user.profile
@@ -1384,6 +1263,6 @@ class DayEntriesReopenView(AuthMixin, View):
 
         entry.is_closed = False
         entry.closed_at = None
-        entry.status = 'open'
+        entry.status = 'in_progress'
         entry.save()
         return JsonResponse(_day_entry_json(entry))
