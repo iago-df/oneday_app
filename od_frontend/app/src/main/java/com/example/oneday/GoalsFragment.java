@@ -70,8 +70,8 @@ public class GoalsFragment extends Fragment {
 
 
     private void setupFilters() {
-        String[] keys   = {"all", "planned", "in_progress", "completed", "archived"};
-        String[] labels = {"All", "Planned", "In Progress", "Completed", "Archived"};
+        String[] keys   = {"all", "planned", "in_progress", "completed"};
+        String[] labels = {"All", "Planned", "In Progress", "Completed"};
         final TextView[] chips = new TextView[keys.length];
         float dp = requireContext().getResources().getDisplayMetrics().density;
 
@@ -254,7 +254,7 @@ public class GoalsFragment extends Fragment {
                 LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT));
 
         TextView tvPct = new TextView(requireContext());
-        tvPct.setText((int) goal.progressPercent + "% complete");
+        tvPct.setText(goal.daysCompleted + " / " + goal.targetDays + " days  ·  " + (int) goal.progressPercent + "%");
         tvPct.setTextSize(android.util.TypedValue.COMPLEX_UNIT_SP, 11);
         tvPct.setTextColor(Color.parseColor("#AAAAAA"));
         tvPct.setLayoutParams(new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
@@ -351,39 +351,14 @@ public class GoalsFragment extends Fragment {
         form.addView(buildFieldLabel(dp, "Title"));
         form.addView(etTitle);
 
-        form.addView(buildFieldLabel(dp, "Type"));
-        String[] typeKeys   = {"daily", "weekly", "monthly", "custom"};
-        String[] typeLabels = {"Daily", "Weekly", "Monthly", "Custom"};
-        final String[] selectedType = {"daily"};
-        final TextView[] chips = new TextView[typeKeys.length];
-
-        LinearLayout chipRow = new LinearLayout(requireContext());
-        chipRow.setOrientation(LinearLayout.HORIZONTAL);
-        LinearLayout.LayoutParams crlp = new LinearLayout.LayoutParams(
+        android.widget.EditText etTargetDays = buildInputField(dp, "30", true);
+        etTargetDays.setText("30");
+        LinearLayout.LayoutParams tdlp = new LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT);
-        crlp.bottomMargin = (int)(14 * dp);
-        chipRow.setLayoutParams(crlp);
-
-        for (int i = 0; i < typeKeys.length; i++) {
-            final int idx = i;
-            TextView chip = new TextView(requireContext());
-            chip.setText(typeLabels[i]);
-            chip.setTextSize(android.util.TypedValue.COMPLEX_UNIT_SP, 12);
-            chip.setGravity(android.view.Gravity.CENTER);
-            chip.setPadding((int)(8*dp), (int)(7*dp), (int)(8*dp), (int)(7*dp));
-            LinearLayout.LayoutParams clp = new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f);
-            clp.setMarginEnd((int)(4 * dp));
-            chip.setLayoutParams(clp);
-            chip.setOnClickListener(v -> {
-                selectedType[0] = typeKeys[idx];
-                for (int j = 0; j < typeKeys.length; j++)
-                    setTypeChip(chips[j], typeKeys[j].equals(selectedType[0]), dp);
-            });
-            chips[i] = chip;
-            setTypeChip(chip, i == 0, dp);
-            chipRow.addView(chip);
-        }
-        form.addView(chipRow);
+        tdlp.bottomMargin = (int)(14 * dp);
+        etTargetDays.setLayoutParams(tdlp);
+        form.addView(buildFieldLabel(dp, "Target days"));
+        form.addView(etTargetDays);
 
         android.widget.EditText etDesc = buildInputField(dp, "Description (optional)", false);
         etDesc.setMinLines(2);
@@ -460,7 +435,10 @@ public class GoalsFragment extends Fragment {
             String title = etTitle.getText().toString().trim();
             if (title.isEmpty()) { etTitle.setError("Required"); return; }
             String desc = etDesc.getText().toString().trim();
-            submitGoal(title, selectedType[0], desc.isEmpty() ? null : desc, dateCapture[0]);
+            int targetDays = 30;
+            try { targetDays = Math.max(1, Integer.parseInt(etTargetDays.getText().toString().trim())); }
+            catch (NumberFormatException ignored) {}
+            submitGoal(title, targetDays, desc.isEmpty() ? null : desc, dateCapture[0]);
         });
 
         btnRow.addView(btnCancel);
@@ -476,11 +454,11 @@ public class GoalsFragment extends Fragment {
         loadGoals();
     }
 
-    private void submitGoal(String title, String type, String desc, String deadline) {
+    private void submitGoal(String title, int targetDays, String desc, String deadline) {
         String token = "Bearer " + session.getToken();
         Map<String, Object> body = new HashMap<>();
         body.put("title", title);
-        body.put("goal_type", type);
+        body.put("target_days", targetDays);
         if (desc != null) body.put("description", desc);
         if (deadline != null) body.put("deadline", deadline);
 
@@ -579,23 +557,6 @@ public class GoalsFragment extends Fragment {
         bg.setCornerRadius(10 * dp);
         et.setBackground(bg);
         return et;
-    }
-
-    private void setTypeChip(TextView chip, boolean selected, float dp) {
-        GradientDrawable bg = new GradientDrawable();
-        bg.setShape(GradientDrawable.RECTANGLE);
-        bg.setCornerRadius(8 * dp);
-        if (selected) {
-            bg.setColor(Color.parseColor("#5D65D9"));
-            chip.setTextColor(Color.WHITE);
-            chip.setTypeface(null, android.graphics.Typeface.BOLD);
-        } else {
-            bg.setColor(Color.parseColor("#F5F5F8"));
-            bg.setStroke((int)(1.5f * dp), Color.parseColor("#5D65D9"));
-            chip.setTextColor(Color.parseColor("#5D65D9"));
-            chip.setTypeface(null, android.graphics.Typeface.NORMAL);
-        }
-        chip.setBackground(bg);
     }
 
     private int getStatusColor(String status) {
