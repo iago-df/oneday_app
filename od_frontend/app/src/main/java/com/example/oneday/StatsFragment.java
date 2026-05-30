@@ -540,16 +540,20 @@ public class StatsFragment extends Fragment {
         row.setLayoutParams(new LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT));
 
-        int completed = 0, hours = 0;
+        int activitiesDone = 0, daysDone = 0;
         float rate = 0;
-        if (summaryData != null && summaryData.activities != null) {
-            completed = summaryData.activities.completed;
-            hours     = summaryData.activities.totalMinutes / 60;
-            rate      = summaryData.activities.completionRate;
+        if (summaryData != null) {
+            if (summaryData.activities != null) {
+                activitiesDone = summaryData.activities.completed;
+                rate           = summaryData.activities.completionRate;
+            }
+            if (summaryData.days != null) {
+                daysDone = summaryData.days.completed;
+            }
         }
 
-        View c1 = buildMiniStatCard("ACTIVITIES", String.valueOf(completed), "done", dp);
-        View c2 = buildMiniStatCard("HOURS", String.valueOf(hours), "logged", dp);
+        View c1 = buildMiniStatCard("ACTIVITIES", String.valueOf(activitiesDone), "done", dp);
+        View c2 = buildMiniStatCard("DAYS", String.valueOf(daysDone), "completed", dp);
         View c3 = buildMiniStatCard("RATE", String.format(Locale.ENGLISH, "%.0f%%", rate), "completion", dp);
 
         LinearLayout.LayoutParams lp1 = new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f);

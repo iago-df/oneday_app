@@ -19,6 +19,5 @@ public class StatsSummaryResponse {
         public int total;
         public int completed;
         @SerializedName("completion_rate")  public float completionRate;
-        @SerializedName("total_minutes")    public int totalMinutes;
     }
 }
