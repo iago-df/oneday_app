@@ -281,6 +281,15 @@ def _goal_json(goal):
     progress_percent = min(round(days_completed / target_days * 100, 1), 100)
     if goal.progress_percent != progress_percent:
         Goal.objects.filter(pk=goal.pk).update(progress_percent=progress_percent)
+
+    new_status = goal.status
+    if days_completed >= target_days and goal.status != 'completed':
+        new_status = 'completed'
+        Goal.objects.filter(pk=goal.pk).update(status='completed')
+    elif days_completed > 0 and goal.status == 'planned':
+        new_status = 'in_progress'
+        Goal.objects.filter(pk=goal.pk).update(status='in_progress')
+
     return {
         'id': goal.id,
         'title': goal.title,
@@ -1078,7 +1087,10 @@ class StatsSummaryView(AuthMixin, View):
             'activities': {
                 'total': total_activities,
                 'completed': completed_activities,
-                'completion_rate': round(completed_activities / total_activities * 100, 1) if total_activities else 0,
+                'completion_rate': round(
+                    sum(e.progress_percent for e in entries.filter(is_closed=True)) /
+                    entries.filter(is_closed=True).count(), 1
+                ) if entries.filter(is_closed=True).exists() else 0,
             },
             'streak': streak,
         })
