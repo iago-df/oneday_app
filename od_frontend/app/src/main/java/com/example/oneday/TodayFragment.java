@@ -113,6 +113,14 @@ public class TodayFragment extends Fragment {
         });
     }
 
+    @Override
+    public void onResume() {
+        super.onResume();
+        if (timelineContainer != null) {
+            loadDashboard();
+        }
+    }
+
     private void setupDots(int activePage) {
         dotsLayout.removeAllViews();
         int dotSize = (int)(8 * requireContext().getResources().getDisplayMetrics().density);

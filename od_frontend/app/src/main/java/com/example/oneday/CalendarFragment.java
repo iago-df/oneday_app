@@ -88,6 +88,12 @@ public class CalendarFragment extends Fragment {
         loadCalendar();
     }
 
+    @Override
+    public void onResume() {
+        super.onResume();
+        loadCalendar();
+    }
+
 
     private void loadCalendar() {
         String token = "Bearer " + session.getToken();

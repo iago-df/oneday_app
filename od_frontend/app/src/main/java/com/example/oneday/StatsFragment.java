@@ -75,6 +75,13 @@ public class StatsFragment extends Fragment {
         loadAll();
     }
 
+    @Override
+    public void onResume() {
+        super.onResume();
+        currentWeekStart = getThisMonday();
+        loadAll();
+    }
+
     private Calendar getThisMonday() {
         Calendar cal = Calendar.getInstance();
         int dow = cal.get(Calendar.DAY_OF_WEEK);

@@ -68,6 +68,14 @@ public class GoalsFragment extends Fragment {
         loadGoals();
     }
 
+    @Override
+    public void onResume() {
+        super.onResume();
+        if (filterScroll != null && filterScroll.getVisibility() == View.VISIBLE) {
+            loadGoals();
+        }
+    }
+
 
     private void setupFilters() {
         String[] keys   = {"all", "planned", "in_progress", "completed"};
