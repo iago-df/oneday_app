@@ -1,4 +1,5 @@
-![Logo](images/logo.png)
+<img src="images/logo.png" width="120"/>
+
 # OneDay
 ![Estado](https://img.shields.io/badge/STATUS-EN%20DESARROLLO-purple?style=flat)
 ![Plataforma](https://img.shields.io/badge/PLATAFORMA-Android-green?style=flat)
@@ -21,35 +22,35 @@
 
 En lugar de listas interminables de tareas, OneDay te invita a decidir cada mañana qué es lo más importante y construir tu día alrededor de eso. Las tareas secundarias existen, pero siempre en segundo plano.
 
-![Pantalla principal](images/today.png)
+<img src="images/today.png" width="260"/>
 
 ---
 
 ## Funcionalidades
 
 - ### Objetivo del día
-![Objetivo](images/goal_picker.png)
+<img src="images/goal_picker.png" width="260"/>
 
 Cada día empieza eligiendo tu meta principal. Puedes asignarla desde tus objetivos activos y visualizar el progreso directamente en la pantalla de inicio.
 
 <br/>
 
 - ### Calendario
-![Calendario](images/calendar.png)
+<img src="images/calendar.png" width="260"/>
 
 Visualiza tu historial mensual con un código de colores por estado: completado, parcial o fallido. Toca cualquier día para ver el detalle de lo que hiciste.
 
 <br/>
 
 - ### Estadísticas
-![Estadísticas](images/stats.png)
+<img src="images/stats.png" width="260"/>
 
 Consulta tu racha actual, el mejor récord, el progreso semanal con gráficas de barras y un resumen de actividades completadas.
 
 <br/>
 
 - ### Objetivos a largo plazo
-![Objetivos](images/goals.png)
+<img src="images/goals.png" width="260"/>
 
 Gestiona metas de varios días con seguimiento automático de progreso. Los días completados o parciales cuentan; los fallidos no penalizan.
 
