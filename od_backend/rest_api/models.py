@@ -40,6 +40,7 @@ class Goal(models.Model):
     ]
 
     user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='goals')
+    tags = models.ManyToManyField('Tag', blank=True, related_name='goals')
     title = models.CharField(max_length=255)
     description = models.TextField(blank=True, null=True)
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='planned')
@@ -119,3 +120,11 @@ class Activity(models.Model):
 
     def __str__(self):
         return self.title
+
+class Tag(models.Model):
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='tags')
+    name = models.CharField(max_length=50)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return self.name
