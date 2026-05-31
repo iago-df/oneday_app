@@ -82,4 +82,4 @@ Asegúrate de que la IP en `ApiClient.java` apunta a tu máquina.
 
 ## Autor
 
-- [Iago Donsión Fernández](https://github.com/iagodf)
+- [Iago Donsión Fernández](https://github.com/iago-df)
