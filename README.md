@@ -1,3 +1,4 @@
+![Logo](images/logo.png)
 # OneDay
 ![Estado](https://img.shields.io/badge/STATUS-EN%20DESARROLLO-purple?style=flat)
 ![Plataforma](https://img.shields.io/badge/PLATAFORMA-Android-green?style=flat)
@@ -30,13 +31,6 @@ En lugar de listas interminables de tareas, OneDay te invita a decidir cada mañ
 ![Objetivo](images/goal_picker.png)
 
 Cada día empieza eligiendo tu meta principal. Puedes asignarla desde tus objetivos activos y visualizar el progreso directamente en la pantalla de inicio.
-
-<br/>
-
-- ### Actividades y tareas
-![Actividades](images/activities.png)
-
-Añade actividades con hora de inicio y duración, o tareas rápidas sin horario. Al completarlas, el progreso del día se actualiza en tiempo real.
 
 <br/>
 
@@ -75,7 +69,6 @@ Gestiona metas de varios días con seguimiento automático de progreso. Los día
 **Backend:**
 ```bash
 cd od_backend
-pip install -r requirements.txt
 python manage.py migrate
 python manage.py runserver
 ```
